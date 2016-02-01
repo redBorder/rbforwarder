@@ -1,0 +1,10 @@
+listener:
+  type: "kafka"
+  config:
+    zookeeper:
+      - "localhost:2181"
+    topics:
+      - "test"
+    batchsize: 1000
+sender:
+  type: "stdout"
