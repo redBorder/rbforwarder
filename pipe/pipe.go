@@ -4,12 +4,12 @@ import (
 	"os"
 	"os/signal"
 
-	"github.com/Bigomby/go-pipes/decoders"
-	"github.com/Bigomby/go-pipes/encoders"
-	"github.com/Bigomby/go-pipes/listeners"
-	"github.com/Bigomby/go-pipes/processors"
-	"github.com/Bigomby/go-pipes/senders"
-	"github.com/Bigomby/go-pipes/util"
+	"github.com/redBorder/rb-forwarder/decoders"
+	"github.com/redBorder/rb-forwarder/encoders"
+	"github.com/redBorder/rb-forwarder/listeners"
+	"github.com/redBorder/rb-forwarder/processors"
+	"github.com/redBorder/rb-forwarder/senders"
+	"github.com/redBorder/rb-forwarder/util"
 
 	"github.com/Sirupsen/logrus"
 )

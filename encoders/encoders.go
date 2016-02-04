@@ -1,7 +1,7 @@
 package encoders
 
 import (
-	"github.com/Bigomby/go-pipes/util"
+	"github.com/redBorder/rb-forwarder/util"
 
 	"github.com/Sirupsen/logrus"
 )

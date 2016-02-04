@@ -1,7 +1,7 @@
 package processors
 
 import (
-	"github.com/Bigomby/go-pipes/util"
+	"github.com/redBorder/rb-forwarder/util"
 )
 
 type NullProcessor struct {

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"time"
 
-	"github.com/Bigomby/go-pipes/util"
+	"github.com/redBorder/rb-forwarder/util"
 
 	"github.com/Sirupsen/logrus"
 	kafkaClient "github.com/stealthly/go_kafka_client"

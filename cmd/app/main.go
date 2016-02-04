@@ -11,8 +11,8 @@ import (
 	"runtime"
 	"runtime/pprof"
 
-	"github.com/Bigomby/go-pipes/pipe"
-	"github.com/Bigomby/go-pipes/util"
+	"github.com/redBorder/rb-forwarder/pipe"
+	"github.com/redBorder/rb-forwarder/util"
 )
 
 var mainLog *logrus.Entry
