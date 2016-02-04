@@ -13,8 +13,8 @@ script:
   - $HOME/gopath/bin/goveralls
 
 install:
-- make get_deps
-- make get_dev_deps
+- make get
+- make get_dev
 
 script:
 - make check
