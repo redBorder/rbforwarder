@@ -18,6 +18,10 @@ func NewSender(config util.ElementConfig) Sender {
 
 	switch config.Type {
 	case "stdout":
+		return &StdoutSender{
+			rawConfig: config.Config,
+		}
+		break
 	default:
 		return &StdoutSender{
 			rawConfig: config.Config,

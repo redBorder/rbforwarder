@@ -9,16 +9,19 @@ import (
 
 type StdoutSender struct {
 	counter   int64
+	id        int
 	timer     *time.Timer
 	rawConfig util.Config
 }
 
-func (s *StdoutSender) Init(i int) error {
+func (s *StdoutSender) Init(id int) error {
+	s.id = id
+
 	go func() {
 		for {
 			s.timer = time.NewTimer(2 * time.Second)
 			<-s.timer.C
-			log.Printf("Sender: Messages per second %d\n", s.counter/2)
+			log.Printf("[%d] Sender: Messages per second %d", s.id, s.counter/2)
 			s.counter = 0
 		}
 	}()
@@ -31,6 +34,7 @@ func (s *StdoutSender) Send(message *util.Message) error {
 		return errors.New("Invalid message")
 	}
 
+	log.Debug(string(message.OutputBuffer.Bytes()))
 	s.counter++
 
 	return nil
