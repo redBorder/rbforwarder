@@ -22,6 +22,11 @@ func NewListener(config util.ElementConfig) Listener {
 			rawConfig: config.Config,
 		}
 		break
+	case "synthetic":
+		return &SyntheticProducer{
+			rawConfig: config.Config,
+		}
+		break
 	default:
 		log.Fatal("No listener info on config file")
 		break
