@@ -105,7 +105,7 @@ func (p *Pipe) startDecoder(i int) {
 func (p *Pipe) startProcessor(i int) {
 	processor := processors.NewProcessor(p.config.Processor)
 	processor.Init(i)
-	workerChannel := make(chan *util.Message, 10)
+	workerChannel := make(chan *util.Message)
 
 	// The worker is ready, put himself on the worker pool
 	go func() {

@@ -144,7 +144,7 @@ func (l *KafkaListener) parseConfig() {
 	l.config.FetchTopicMetadataRetries = 3
 	l.config.FetchTopicMetadataBackoff = 500 * time.Millisecond
 	// l.config.FetchMinBytes = int32(1)
-	// l.config.FetchWaitMaxMs = 100
+	l.config.FetchWaitMaxMs = 500
 	l.config.FetchMessageMaxBytes = int32(100000000)
 
 	// Offset
