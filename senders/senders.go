@@ -17,6 +17,11 @@ func NewSender(config util.ElementConfig) Sender {
 	log = util.NewLogger("sender")
 
 	switch config.Type {
+	case "http":
+		return &HttpSender{
+			rawConfig: config.Config,
+		}
+		break
 	case "stdout":
 		return &StdoutSender{
 			rawConfig: config.Config,
