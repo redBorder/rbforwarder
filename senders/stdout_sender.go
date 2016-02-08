@@ -25,6 +25,7 @@ func (s *StdoutSender) Init(id int) error {
 			s.counter = 0
 		}
 	}()
+
 	return nil
 }
 
@@ -34,7 +35,7 @@ func (s *StdoutSender) Send(message *util.Message) error {
 		return errors.New("Invalid message")
 	}
 
-	log.Debug(string(message.OutputBuffer.Bytes()))
+	log.Debugf("MESSAGE: %s", string(message.OutputBuffer.Bytes()))
 	s.counter++
 
 	return nil
