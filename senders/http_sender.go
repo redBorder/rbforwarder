@@ -20,6 +20,7 @@ type HttpSender struct {
 
 	// Statistics
 	counter int64
+	timer   *time.Timer
 
 	// Configuration
 	rawConfig util.Config
@@ -38,6 +39,7 @@ type HttpSenderConfig struct {
 	Url          string
 	IgnoreCert   bool
 	Deflate      bool
+	ShowCounter  bool
 	BatchSize    int64
 	BatchTimeout time.Duration
 }
@@ -97,6 +99,17 @@ func (s *HttpSender) Send(message *util.Message) error {
 						s.batchBuffer[path].mutex.Unlock()
 					}
 					s.batchBuffer[path].timer.Reset(s.config.BatchTimeout)
+				}
+			}()
+		}
+
+		if s.config.ShowCounter {
+			go func() {
+				for {
+					s.timer = time.NewTimer(2 * time.Second)
+					<-s.timer.C
+					log.Printf("[%d] Sender: Messages per second %d", s.id, s.counter*s.config.BatchSize/2)
+					s.counter = 0
 				}
 			}()
 		}
@@ -199,5 +212,8 @@ func (s *HttpSender) parseConfig() {
 	}
 	if s.rawConfig["deflate"] != nil {
 		s.config.Deflate = s.rawConfig["deflate"].(bool)
+	}
+	if s.rawConfig["showcounter"] != nil {
+		s.config.ShowCounter = s.rawConfig["showcounter"].(bool)
 	}
 }
