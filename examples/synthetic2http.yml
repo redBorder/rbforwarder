@@ -1,0 +1,9 @@
+listener:
+  type: "synthetic"
+sender:
+  type: "http"
+  config:
+    url: "http://localhost:8080"
+    deflate: true
+    batchsize: 1000
+    batchtimeout: 1000
