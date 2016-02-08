@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Bigomby/go-pipes/util"
+	"github.com/redBorder/rb-forwarder/util"
 )
 
 type HttpSender struct {
