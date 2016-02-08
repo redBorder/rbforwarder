@@ -1,0 +1,4 @@
+listener:
+  type: "synthetic"
+sender:
+  type: "stdout"
