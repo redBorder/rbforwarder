@@ -9,7 +9,7 @@ import (
 var log *logrus.Entry
 
 type Listener interface {
-	Listen() chan *util.Message
+	Listen(*util.MessagePool) chan *util.Message
 	Close()
 }
 

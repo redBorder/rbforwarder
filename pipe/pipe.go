@@ -27,6 +27,9 @@ type Pipe struct {
 	ProcessorPool chan chan *util.Message
 	EncoderPool   chan chan *util.Message
 	SenderPool    chan chan *util.Message
+
+	// Messages pool
+	MessagePool *util.MessagePool
 }
 
 /**
@@ -42,13 +45,14 @@ func NewPipe(config util.PipeConfig, workers int) Pipe {
 		ProcessorPool: make(chan chan *util.Message, workers),
 		EncoderPool:   make(chan chan *util.Message, workers),
 		SenderPool:    make(chan chan *util.Message, workers),
+		MessagePool:   util.NewMessagePool(5),
 	}
 
 	ctrlc := make(chan os.Signal, 1)
 	signal.Notify(ctrlc, os.Interrupt)
 
 	listener := listeners.NewListener(p.config.Listener)
-	c := listener.Listen()
+	c := listener.Listen(p.MessagePool)
 
 	log.Info("Listener ready")
 	for i := 0; i < workers; i++ {
@@ -167,6 +171,7 @@ func (p *Pipe) startSender(i int) {
 			p.SenderPool <- workerChannel
 			message := <-workerChannel
 			sender.Send(message)
+			p.MessagePool.Give(message)
 		}
 	}()
 }

@@ -1,7 +1,6 @@
 package listeners
 
 import (
-	"bytes"
 	"time"
 
 	"github.com/redBorder/rb-forwarder/util"
@@ -14,21 +13,23 @@ var kafkaLog *logrus.Entry
 var consumers []*kafkaClient.Consumer
 
 type KafkaListener struct {
-	rawConfig util.Config
-	c         chan *util.Message
-	topics    []string
+	rawConfig   util.Config
+	c           chan *util.Message
+	messagePool *util.MessagePool
+	topics      []string
 
 	counter int64
 
 	config *kafkaClient.ConsumerConfig
 }
 
-func (l *KafkaListener) Listen() chan *util.Message {
+func (l *KafkaListener) Listen(messagePool *util.MessagePool) chan *util.Message {
 	kafkaLog = util.NewLogger("kafka-listener")
 	kafkaClient.Logger = kafkaClient.NewDefaultLogger(kafkaClient.ErrorLevel)
 
 	// Create the message channel
 	l.c = make(chan *util.Message)
+	l.messagePool = messagePool
 
 	// Parse the configuration
 	l.parseConfig()
@@ -62,10 +63,7 @@ func (l *KafkaListener) Listen() chan *util.Message {
 
 func (l *KafkaListener) GetStrategy() func(*kafkaClient.Worker, *kafkaClient.Message, kafkaClient.TaskId) kafkaClient.WorkerResult {
 	return func(_ *kafkaClient.Worker, msg *kafkaClient.Message, id kafkaClient.TaskId) kafkaClient.WorkerResult {
-		message := &util.Message{
-			InputBuffer: new(bytes.Buffer),
-			Attributes:  make(map[string]string),
-		}
+		message := l.messagePool.Take()
 		message.Attributes["path"] = msg.Topic
 		message.InputBuffer.Write(msg.Value)
 		l.counter++
@@ -107,6 +105,7 @@ func (l *KafkaListener) parseConfig() {
 		brokersAux := l.rawConfig["zookeeper"].([]interface{})
 		for i := 0; i < len(brokersAux); i++ {
 			brokers = append(brokers, brokersAux[i].(string))
+			log.Print("Added broker " + brokersAux[i].(string))
 		}
 	}
 
