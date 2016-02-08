@@ -1,7 +1,6 @@
 package listeners
 
 import (
-	"bytes"
 	"encoding/json"
 	"math/rand"
 	// "time"
@@ -63,7 +62,7 @@ type SyntheticProducer struct {
 	counter int64
 }
 
-func (l *SyntheticProducer) Listen() chan *util.Message {
+func (l *SyntheticProducer) Listen(messagePool *util.MessagePool) chan *util.Message {
 	// Create the message channel
 	l.c = make(chan *util.Message)
 
@@ -120,12 +119,9 @@ func (l *SyntheticProducer) Listen() chan *util.Message {
 				}
 
 				buf, _ := json.Marshal(config.Fields)
-				message := &util.Message{
-					Attributes: map[string]string{
-						"path": config.Topic,
-					},
-					InputBuffer: bytes.NewBuffer(buf),
-				}
+				message := messagePool.Take()
+				message.InputBuffer.Write(buf)
+				message.Attributes["path"] = config.Topic
 
 				l.c <- message
 				// time.Sleep(1 * time.Second)
