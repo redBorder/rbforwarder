@@ -1,7 +1,6 @@
 package listeners
 
 import (
-	"bytes"
 	"encoding/json"
 	"math/rand"
 
@@ -64,7 +63,6 @@ type SyntheticProducer struct {
 }
 
 type SyntheticProducerConfig struct {
-	workers int
 }
 
 func (l *SyntheticProducer) Listen(messagePool *util.MessagePool) chan *util.Message {
@@ -75,80 +73,65 @@ func (l *SyntheticProducer) Listen(messagePool *util.MessagePool) chan *util.Mes
 	// l.parseConfig()
 
 	l.alive = true
-
-	for i := 0; i < l.config.workers; i++ {
-		go func() {
-			for l.alive {
-				config := Config{
-					Topic: "rb_flow",
-					Fields: Flow{
-						Client_latlong:      "37.89,26.39",
-						Dst_country_code:    "US",
-						Dot11_status:        "PROBING",
-						Bytes:               rand.Int63n(90) + 10,
-						Src_net_name:        "0.0.0.0/0",
-						Flow_sampler_id:     0,
-						Direction:           "ingress",
-						Wireless_station:    "00:00:00:00:22:FF",
-						Biflow_direction:    "initiator",
-						Pkts:                rand.Int63n(500),
-						Dst:                 "80.150.0.1",
-						Campus:              "Campus A",
-						Building:            "Building A",
-						Floor:               "Floor A",
-						Timestamp:           1454669936,
-						Client_mac:          "00:00:00:00:00:00",
-						Wireless_id:         "SSID_A",
-						Flow_end_reason:     "idle timeout",
-						Src_net:             "0.0.0.0/0",
-						Client_rssi_num:     80,
-						Engine_id_name:      "IANA-L4",
-						Src:                 "192.168.255.255",
-						Application_id:      "11:101",
-						Sensor_ip:           "90.1.44.3 ",
-						Application_id_name: "CAIlic",
-						Dst_net:             "0.0.0.0/0",
-						Dst_net_name:        " 0.0.0.0/0",
-						L4_proto:            11,
-						Ip_protocol_version: 4,
-						Sensor_name:         "sensorA",
-						Src_country_code:    "US",
-						Engine_id:           10,
-						Client_mac_vendor:   "SAMSUNG ELECTRO-MECHANICS",
-						First_switched:      1454665936,
-						Http_host:           "ambisan.es",
-						Src_port:            80,
-						Namespace_uuid:      2222,
-						Sensor_uuid:         4,
-					},
-				}
-
-				buf, _ := json.Marshal(config.Fields)
-				message := &util.Message{
-					Attributes: map[string]string{
-						"path": config.Topic,
-					},
-					InputBuffer: bytes.NewBuffer(buf),
-				}
-				message.InputBuffer.Write(buf)
-				message.Attributes["path"] = config.Topic
-
-				l.c <- message
-				// time.Sleep(1 * time.Second)
+	go func() {
+		for l.alive {
+			config := Config{
+				Topic: "rb_flow",
+				Fields: Flow{
+					Client_latlong:      "37.89,26.39",
+					Dst_country_code:    "US",
+					Dot11_status:        "PROBING",
+					Bytes:               rand.Int63n(90) + 10,
+					Src_net_name:        "0.0.0.0/0",
+					Flow_sampler_id:     0,
+					Direction:           "ingress",
+					Wireless_station:    "00:00:00:00:22:FF",
+					Biflow_direction:    "initiator",
+					Pkts:                rand.Int63n(500),
+					Dst:                 "80.150.0.1",
+					Campus:              "Campus A",
+					Building:            "Building A",
+					Floor:               "Floor A",
+					Timestamp:           1454669936,
+					Client_mac:          "00:00:00:00:00:00",
+					Wireless_id:         "SSID_A",
+					Flow_end_reason:     "idle timeout",
+					Src_net:             "0.0.0.0/0",
+					Client_rssi_num:     80,
+					Engine_id_name:      "IANA-L4",
+					Src:                 "192.168.255.255",
+					Application_id:      "11:101",
+					Sensor_ip:           "90.1.44.3 ",
+					Application_id_name: "CAIlic",
+					Dst_net:             "0.0.0.0/0",
+					Dst_net_name:        " 0.0.0.0/0",
+					L4_proto:            11,
+					Ip_protocol_version: 4,
+					Sensor_name:         "sensorA",
+					Src_country_code:    "US",
+					Engine_id:           10,
+					Client_mac_vendor:   "SAMSUNG ELECTRO-MECHANICS",
+					First_switched:      1454665936,
+					Http_host:           "ambisan.es",
+					Src_port:            80,
+					Namespace_uuid:      2222,
+					Sensor_uuid:         4,
+				},
 			}
-		}()
-	}
+
+			buf, _ := json.Marshal(config.Fields)
+			message := messagePool.Take()
+			message.InputBuffer.Write(buf)
+			message.Attributes["path"] = config.Topic
+			l.c <- message
+		}
+	}()
 
 	return l.c
 }
 
 // parseConfig
 func (l *SyntheticProducer) parseConfig() {
-	if l.rawConfig["workers"] != nil {
-		l.config.workers = l.rawConfig["workers"].(int)
-	} else {
-		l.config.workers = 1
-	}
 }
 
 func (l *SyntheticProducer) Close() {
