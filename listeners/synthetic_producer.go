@@ -1,9 +1,9 @@
 package listeners
 
 import (
+	"bytes"
 	"encoding/json"
 	"math/rand"
-	// "time"
 
 	"github.com/redBorder/rb-forwarder/util"
 )
@@ -58,11 +58,16 @@ type SyntheticProducer struct {
 	rawConfig util.Config
 	c         chan *util.Message
 	alive     bool
+	counter   int64
 
-	counter int64
+	config SyntheticProducerConfig
 }
 
-func (l *SyntheticProducer) Listen(messagePool *util.MessagePool) chan *util.Message {
+type SyntheticProducerConfig struct {
+	workers int
+}
+
+func (l *SyntheticProducer) Listen() chan *util.Message {
 	// Create the message channel
 	l.c = make(chan *util.Message)
 
@@ -71,7 +76,7 @@ func (l *SyntheticProducer) Listen(messagePool *util.MessagePool) chan *util.Mes
 
 	l.alive = true
 
-	for i := 0; i < 50; i++ {
+	for i := 0; i < l.config.workers; i++ {
 		go func() {
 			for l.alive {
 				config := Config{
@@ -119,7 +124,12 @@ func (l *SyntheticProducer) Listen(messagePool *util.MessagePool) chan *util.Mes
 				}
 
 				buf, _ := json.Marshal(config.Fields)
-				message := messagePool.Take()
+				message := &util.Message{
+					Attributes: map[string]string{
+						"path": config.Topic,
+					},
+					InputBuffer: bytes.NewBuffer(buf),
+				}
 				message.InputBuffer.Write(buf)
 				message.Attributes["path"] = config.Topic
 
@@ -134,7 +144,11 @@ func (l *SyntheticProducer) Listen(messagePool *util.MessagePool) chan *util.Mes
 
 // parseConfig
 func (l *SyntheticProducer) parseConfig() {
-
+	if l.rawConfig["workers"] != nil {
+		l.config.workers = l.rawConfig["workers"].(int)
+	} else {
+		l.config.workers = 1
+	}
 }
 
 func (l *SyntheticProducer) Close() {
