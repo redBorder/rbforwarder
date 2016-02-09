@@ -25,7 +25,7 @@ type KafkaListener struct {
 
 func (l *KafkaListener) Listen() chan *util.Message {
 	kafkaLog = util.NewLogger("kafka-listener")
-	kafkaClient.Logger = kafkaClient.NewDefaultLogger(kafkaClient.ErrorLevel)
+	kafkaClient.Logger = kafkaClient.NewDefaultLogger(kafkaClient.InfoLevel)
 
 	// Create the message channel
 	l.c = make(chan *util.Message)
@@ -35,17 +35,21 @@ func (l *KafkaListener) Listen() chan *util.Message {
 
 	numConsumers := len(l.topics)
 	consumers := make([]*kafkaClient.Consumer, numConsumers)
+	topics := make(map[string]int)
+	config := *l.config
+	config.Strategy = l.GetStrategy()
+	config.WorkerFailureCallback = FailedCallback
+	config.WorkerFailedAttemptCallback = FailedAttemptCallback
+
 	for i := 0; i < numConsumers; i++ {
-		config := *l.config
-		config.Strategy = l.GetStrategy()
-		config.WorkerFailureCallback = FailedCallback
-		config.WorkerFailedAttemptCallback = FailedAttemptCallback
-		consumers[0] = kafkaClient.NewConsumer(&config)
-		topics := map[string]int{l.topics[0]: config.NumConsumerFetchers}
-		go func() {
-			consumers[0].StartStatic(topics)
-		}()
+		topics[l.topics[i]] = config.NumConsumerFetchers
 	}
+
+	consumers[0] = kafkaClient.NewConsumer(&config)
+
+	go func() {
+		consumers[0].StartStatic(topics)
+	}()
 
 	// // Start timer for show messages per second
 	// go func() {
@@ -62,6 +66,7 @@ func (l *KafkaListener) Listen() chan *util.Message {
 
 func (l *KafkaListener) GetStrategy() func(*kafkaClient.Worker, *kafkaClient.Message, kafkaClient.TaskId) kafkaClient.WorkerResult {
 	return func(_ *kafkaClient.Worker, msg *kafkaClient.Message, id kafkaClient.TaskId) kafkaClient.WorkerResult {
+		log.Debugf("%s: %s", msg.Topic, msg.Value)
 		message := &util.Message{
 			InputBuffer: new(bytes.Buffer),
 			Attributes:  make(map[string]string),
@@ -111,7 +116,7 @@ func (l *KafkaListener) parseConfig() {
 	}
 
 	l.config = kafkaClient.DefaultConsumerConfig()
-	l.config.Groupid = "go-pipes"
+	l.config.Groupid = "rb_forwarder"
 
 	// Worker
 	l.config.NumWorkers = 1
@@ -123,7 +128,7 @@ func (l *KafkaListener) parseConfig() {
 	l.config.WorkerManagersStopTimeout = 1 * time.Minute
 
 	// Rebalance settings
-	l.config.BarrierTimeout = 5 * time.Second
+	l.config.BarrierTimeout = 10 * time.Second
 	l.config.RebalanceMaxRetries = int32(3)
 	l.config.RebalanceBackoff = 5 * time.Second
 	l.config.PartitionAssignmentStrategy = "range"
