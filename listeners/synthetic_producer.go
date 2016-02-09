@@ -67,7 +67,7 @@ type SyntheticProducerConfig struct {
 	workers int
 }
 
-func (l *SyntheticProducer) Listen() chan *util.Message {
+func (l *SyntheticProducer) Listen(messagePool *util.MessagePool) chan *util.Message {
 	// Create the message channel
 	l.c = make(chan *util.Message)
 
