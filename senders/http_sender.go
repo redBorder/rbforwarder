@@ -62,6 +62,17 @@ func (s *HttpSender) Init(id int) error {
 	// A map to store buffers for each endpoint
 	s.batchBuffer = make(map[string]*BatchBuffer)
 
+	if s.config.ShowCounter {
+		go func() {
+			for {
+				s.timer = time.NewTimer(30 * time.Second)
+				<-s.timer.C
+				log.Infof("[%d] Sender: Messages per second %d", s.id, s.counter*s.config.BatchSize/30)
+				s.counter = 0
+			}
+		}()
+	}
+
 	return nil
 }
 
@@ -93,23 +104,12 @@ func (s *HttpSender) Send(message *util.Message) error {
 			go func() {
 				for {
 					<-s.batchBuffer[path].timer.C
+					s.batchBuffer[path].mutex.Lock()
 					if s.batchBuffer[path].messageCount > 0 {
-						s.batchBuffer[path].mutex.Lock()
 						s.batchSend(s.batchBuffer[path], path)
-						s.batchBuffer[path].mutex.Unlock()
 					}
+					s.batchBuffer[path].mutex.Unlock()
 					s.batchBuffer[path].timer.Reset(s.config.BatchTimeout)
-				}
-			}()
-		}
-
-		if s.config.ShowCounter {
-			go func() {
-				for {
-					s.timer = time.NewTimer(30 * time.Second)
-					<-s.timer.C
-					log.Infof("[%d] Sender: Messages per second %d", s.id, s.counter*s.config.BatchSize/30)
-					s.counter = 0
 				}
 			}()
 		}
