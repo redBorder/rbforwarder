@@ -106,9 +106,9 @@ func (s *HttpSender) Send(message *util.Message) error {
 		if s.config.ShowCounter {
 			go func() {
 				for {
-					s.timer = time.NewTimer(2 * time.Second)
+					s.timer = time.NewTimer(30 * time.Second)
 					<-s.timer.C
-					log.Printf("[%d] Sender: Messages per second %d", s.id, s.counter*s.config.BatchSize/2)
+					log.Infof("[%d] Sender: Messages per second %d", s.id, s.counter*s.config.BatchSize/30)
 					s.counter = 0
 				}
 			}()
