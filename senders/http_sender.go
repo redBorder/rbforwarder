@@ -157,7 +157,7 @@ func (s *HttpSender) batchSend(batchBuffer *BatchBuffer, path string) {
 	req, err := http.NewRequest("POST", s.config.Url+"/"+path, batchBuffer.buff)
 	if err != nil {
 		log.Errorf("Error creating request: %s", err.Error())
-		return
+		goto FINISH
 	}
 
 	// Use proper header for sending deflate
@@ -169,13 +169,15 @@ func (s *HttpSender) batchSend(batchBuffer *BatchBuffer, path string) {
 	_, err = s.client.Do(req)
 	if err != nil {
 		log.Errorf("Error sending request: %s", err.Error())
-		return
+		goto FINISH
 	}
 
 	log.Debugf("Sending %d messages to %s", batchBuffer.messageCount, s.config.Url+"/"+path)
 
 	// Statistics
 	s.counter++
+
+FINISH:
 
 	// Reset buffer and clear message counter
 	batchBuffer.messageCount = 0
