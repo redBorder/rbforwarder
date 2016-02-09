@@ -12,6 +12,9 @@ build:
 	@printf "$(MKL_YELLOW)Building $(BIN)$(MKL_CLR_RESET)\n"
 	go build -o $(BIN) ./cmd/app/
 
+clean:
+	rm -f $(BIN)
+
 install:
 	@printf "$(MKL_YELLOW)Install $(BIN) to $(bindir)$(MKL_CLR_RESET)\n"
 	install $(BIN) $(bindir)
