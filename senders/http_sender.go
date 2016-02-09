@@ -104,11 +104,11 @@ func (s *HttpSender) Send(message *util.Message) error {
 			go func() {
 				for {
 					<-s.batchBuffer[path].timer.C
+					s.batchBuffer[path].mutex.Lock()
 					if s.batchBuffer[path].messageCount > 0 {
-						s.batchBuffer[path].mutex.Lock()
 						s.batchSend(s.batchBuffer[path], path)
-						s.batchBuffer[path].mutex.Unlock()
 					}
+					s.batchBuffer[path].mutex.Unlock()
 					s.batchBuffer[path].timer.Reset(s.config.BatchTimeout)
 				}
 			}()
