@@ -16,7 +16,7 @@ import (
 
 var log *logrus.Entry
 
-// Defines a collection of actions that act in cascade starting with an incoming message
+// Pipe defines a collection of actions that act in cascade starting with an incoming message
 type Pipe struct {
 
 	// Configuration
@@ -32,9 +32,7 @@ type Pipe struct {
 	MessagePool *util.MessagePool
 }
 
-/**
- * Creates a new pipe using given processors and a number of workers
- */
+// NewPipe Creates a new pipe using given processors and a number of workers
 func NewPipe(config util.PipeConfig, workers int) Pipe {
 
 	log = util.NewLogger("pipe")
@@ -74,8 +72,6 @@ func NewPipe(config util.PipeConfig, workers int) Pipe {
 			break
 		}
 	}
-
-	return p
 }
 
 // Worker that decodes the received message

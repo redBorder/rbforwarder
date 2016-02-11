@@ -3,13 +3,14 @@ package main
 import (
 	"flag"
 	"fmt"
-	"github.com/Sirupsen/logrus"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"runtime"
 	"runtime/pprof"
+
+	"github.com/Sirupsen/logrus"
 
 	"github.com/redBorder/rb-forwarder/pipe"
 	"github.com/redBorder/rb-forwarder/util"

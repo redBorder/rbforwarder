@@ -6,6 +6,7 @@ import (
 	"github.com/Sirupsen/logrus"
 )
 
+// Decoder is an interface for objects that decodes a raw message
 type Decoder interface {
 	Init(int) error
 	Decode(*util.Message) error
@@ -13,6 +14,7 @@ type Decoder interface {
 
 var log *logrus.Entry
 
+// NewDecoder helps to create a new decoder object
 func NewDecoder(config util.ElementConfig) Decoder {
 	log = util.NewLogger("decoder")
 
@@ -21,8 +23,5 @@ func NewDecoder(config util.ElementConfig) Decoder {
 		return &NullDecoder{
 			configRaw: config,
 		}
-		break
 	}
-
-	return nil
 }

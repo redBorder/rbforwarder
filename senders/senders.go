@@ -8,31 +8,28 @@ import (
 
 var log *logrus.Entry
 
+// Sender is the interface for every sender
 type Sender interface {
 	Init(int) error
 	Send(*util.Message) error
 }
 
+// NewSender is a helper for create a sender object
 func NewSender(config util.ElementConfig) Sender {
 	log = util.NewLogger("sender")
 
 	switch config.Type {
 	case "http":
-		return &HttpSender{
+		return &HTTPSender{
 			rawConfig: config.Config,
 		}
-		break
 	case "stdout":
 		return &StdoutSender{
 			rawConfig: config.Config,
 		}
-		break
 	default:
 		return &StdoutSender{
 			rawConfig: config.Config,
 		}
-		break
 	}
-
-	return nil
 }

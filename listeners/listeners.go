@@ -8,11 +8,13 @@ import (
 
 var log *logrus.Entry
 
+// Listener is an interface for listeners objects
 type Listener interface {
 	Listen(*util.MessagePool) chan *util.Message
 	Close()
 }
 
+// NewListener is a helper for create a new listener object
 func NewListener(config util.ElementConfig) Listener {
 	log = util.NewLogger("listener")
 
@@ -21,12 +23,10 @@ func NewListener(config util.ElementConfig) Listener {
 		return &KafkaListener{
 			rawConfig: config.Config,
 		}
-		break
 	case "synthetic":
 		return &SyntheticProducer{
 			rawConfig: config.Config,
 		}
-		break
 	default:
 		log.Fatal("No listener info on config file")
 		break

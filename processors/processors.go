@@ -8,6 +8,8 @@ import (
 
 var log *logrus.Entry
 
+// Processor is an interface for object that process a data structure and
+// performs chantes on it
 type Processor interface {
 	Init(int) error
 	Process(message *util.Message) (bool, error)
@@ -15,6 +17,7 @@ type Processor interface {
 	AlertHandler() (*util.Message, error)
 }
 
+// NewProcessor is a helper for create a new processor object
 func NewProcessor(config util.ElementConfig) Processor {
 	log = util.NewLogger("processor")
 
@@ -23,8 +26,5 @@ func NewProcessor(config util.ElementConfig) Processor {
 		return &NullProcessor{
 			rawConfig: config.Config,
 		}
-		break
 	}
-
-	return nil
 }

@@ -8,11 +8,13 @@ import (
 
 var log *logrus.Entry
 
+// Encoder is an interface for objects that encode a data structure to a buffer
 type Encoder interface {
 	Init(int) error
 	Encode(*util.Message) error
 }
 
+// NewEncoder is a helper for create a new encoder object
 func NewEncoder(config util.ElementConfig) Encoder {
 	log = util.NewLogger("encoder")
 
@@ -21,8 +23,5 @@ func NewEncoder(config util.ElementConfig) Encoder {
 		return &NullEncoder{
 			configRaw: config,
 		}
-		break
 	}
-
-	return nil
 }
