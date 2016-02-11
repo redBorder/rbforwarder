@@ -69,7 +69,7 @@ func (s *HTTPSender) Init(id int) error {
 			for {
 				s.timer = time.NewTimer(30 * time.Second)
 				<-s.timer.C
-				log.Infof("[%d] Sender: Messages per second %d", s.id, s.counter*s.config.BatchSize/30)
+				log.Infof("[%d] Sender: Messages per second %d", s.id, s.counter/30)
 				s.counter = 0
 			}
 		}()
@@ -177,7 +177,7 @@ func (s *HTTPSender) batchSend(batchBuffer *BatchBuffer, path string) {
 	log.Debugf("Sending %d messages to %s", batchBuffer.messageCount, s.config.URL+"/"+path)
 
 	// Statistics
-	s.counter++
+	s.counter += batchBuffer.messageCount
 
 FINISH:
 
