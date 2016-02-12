@@ -22,6 +22,8 @@ var profile bool
 var (
 	configFile string
 	workers    int
+	githash    string
+	version    string
 )
 
 func init() {
@@ -29,8 +31,15 @@ func init() {
 	debugFlag := flag.Bool("debug", false, "Show debug info")
 	profileFlag := flag.Bool("profile", false, "Profile CPU usage")
 	workersFlag := flag.Int("workers", 1, "Number of workers")
+	versionFlag := flag.Bool("version", false, "Print version")
 
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Println("Version: ", version)
+		fmt.Println("SHA: ", githash)
+		os.Exit(0)
+	}
 
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
