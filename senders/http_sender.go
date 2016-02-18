@@ -41,7 +41,7 @@ type httpSenderConfig struct {
 	URL          string
 	IgnoreCert   bool
 	Deflate      bool
-	ShowCounter  bool
+	ShowCounter  int
 	BatchSize    int64
 	BatchTimeout time.Duration
 }
@@ -64,12 +64,15 @@ func (s *HTTPSender) Init(id int) error {
 	// A map to store buffers for each endpoint
 	s.batchBuffer = make(map[string]*BatchBuffer)
 
-	if s.config.ShowCounter {
+	if s.config.ShowCounter > 0 {
 		go func() {
 			for {
-				s.timer = time.NewTimer(30 * time.Second)
-				<-s.timer.C
-				log.Infof("[%d] Sender: Messages per second %d", s.id, s.counter/30)
+				timer := time.NewTimer(time.Duration(s.config.ShowCounter) * time.Second)
+				<-timer.C
+				log.Infof("[%d] Sender: Messages per second %d", s.id, s.counter/int64(s.config.ShowCounter))
+				if s.counter == 0 {
+					log.Warnf("[%d] No messages sent", s.id)
+				}
 				s.counter = 0
 			}
 		}()
@@ -203,6 +206,7 @@ func (s *HTTPSender) parseConfig() {
 	} else {
 		log.Fatal("No url provided")
 	}
+
 	if s.rawConfig["insecure"] != nil {
 		s.config.IgnoreCert = s.rawConfig["insecure"].(bool)
 	}
@@ -218,6 +222,6 @@ func (s *HTTPSender) parseConfig() {
 		s.config.Deflate = s.rawConfig["deflate"].(bool)
 	}
 	if s.rawConfig["showcounter"] != nil {
-		s.config.ShowCounter = s.rawConfig["showcounter"].(bool)
+		s.config.ShowCounter = s.rawConfig["showcounter"].(int)
 	}
 }
