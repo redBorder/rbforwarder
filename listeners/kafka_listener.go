@@ -2,7 +2,6 @@ package listeners
 
 import (
 	"bytes"
-	"sync/atomic"
 	"time"
 
 	"github.com/redBorder/rb-forwarder/util"
@@ -15,10 +14,11 @@ var kafkaLog *logrus.Entry
 var consumers []*kafkaClient.Consumer
 
 type KafkaListener struct {
-	rawConfig util.Config
-	c         chan *util.Message
-	topics    []string
-	maxRate   uint32
+	rawConfig   util.Config
+	topics      []string
+	c           chan *util.Message
+	maxRate     uint32
+	keepSending chan bool
 
 	counter         int64
 	currentMessages uint32
@@ -32,6 +32,7 @@ func (l *KafkaListener) Listen() chan *util.Message {
 
 	// Create the message channel
 	l.c = make(chan *util.Message)
+	l.keepSending = make(chan bool)
 
 	// Parse the configuration
 	l.parseConfig()
@@ -54,22 +55,11 @@ func (l *KafkaListener) Listen() chan *util.Message {
 		consumers[0].StartStatic(topics)
 	}()
 
-	// // Start timer for show messages per second
-	// go func() {
-	// 	for {
-	// 		timer := time.NewTimer(1 * time.Second)
-	// 		<-timer.C
-	// 		kafkaLog.Debugf("Fetching %d/s", l.counter)
-	// 		l.counter = 0
-	// 	}
-	// }()
-	//
-
 	go func() {
 		for {
 			timer := time.NewTimer(1 * time.Second)
 			<-timer.C
-			atomic.StoreUint32(&l.currentMessages, 0)
+			l.keepSending <- true
 		}
 	}()
 
@@ -78,7 +68,9 @@ func (l *KafkaListener) Listen() chan *util.Message {
 
 func (l *KafkaListener) GetStrategy() func(*kafkaClient.Worker, *kafkaClient.Message, kafkaClient.TaskId) kafkaClient.WorkerResult {
 	return func(_ *kafkaClient.Worker, msg *kafkaClient.Message, id kafkaClient.TaskId) kafkaClient.WorkerResult {
-		for atomic.LoadUint32(&l.currentMessages) > l.maxRate {
+		if l.maxRate > 0 && l.currentMessages >= l.maxRate {
+			<-l.keepSending
+			l.currentMessages = 0
 		}
 
 		log.Debugf("%s: %s", msg.Topic, msg.Value)
@@ -90,7 +82,7 @@ func (l *KafkaListener) GetStrategy() func(*kafkaClient.Worker, *kafkaClient.Mes
 		message.InputBuffer.Write(msg.Value)
 		l.counter++
 		l.c <- message
-		atomic.AddUint32(&l.currentMessages, 1)
+		l.currentMessages++
 		return kafkaClient.NewSuccessfulResult(id)
 	}
 }
