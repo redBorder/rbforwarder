@@ -144,13 +144,13 @@ func (l *KafkaListener) parseConfig() {
 	l.config.FetchBatchTimeout = 1 * time.Second
 	l.config.RequeueAskNextBackoff = 1 * time.Second
 	l.config.SocketTimeout = 30 * time.Second
-	l.config.QueuedMaxMessages = 1000
+	l.config.QueuedMaxMessages = 10
 	l.config.RefreshLeaderBackoff = 200 * time.Millisecond
 	l.config.FetchTopicMetadataRetries = 3
 	l.config.FetchTopicMetadataBackoff = 500 * time.Millisecond
 	// l.config.FetchMinBytes = int32(1)
 	l.config.FetchWaitMaxMs = 500
-	l.config.FetchMessageMaxBytes = int32(100000000)
+	l.config.FetchMessageMaxBytes = int32(26214400)
 
 	// Offset
 	zkConfig := kafkaClient.NewZookeeperConfig()
