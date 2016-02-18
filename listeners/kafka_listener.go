@@ -2,6 +2,7 @@ package listeners
 
 import (
 	"bytes"
+	"sync/atomic"
 	"time"
 
 	"github.com/redBorder/rb-forwarder/util"
@@ -17,8 +18,10 @@ type KafkaListener struct {
 	rawConfig util.Config
 	c         chan *util.Message
 	topics    []string
+	maxRate   uint32
 
-	counter int64
+	counter         int64
+	currentMessages uint32
 
 	config *kafkaClient.ConsumerConfig
 }
@@ -60,12 +63,24 @@ func (l *KafkaListener) Listen() chan *util.Message {
 	// 		l.counter = 0
 	// 	}
 	// }()
+	//
+
+	go func() {
+		for {
+			timer := time.NewTimer(1 * time.Second)
+			<-timer.C
+			atomic.StoreUint32(&l.currentMessages, 0)
+		}
+	}()
 
 	return l.c
 }
 
 func (l *KafkaListener) GetStrategy() func(*kafkaClient.Worker, *kafkaClient.Message, kafkaClient.TaskId) kafkaClient.WorkerResult {
 	return func(_ *kafkaClient.Worker, msg *kafkaClient.Message, id kafkaClient.TaskId) kafkaClient.WorkerResult {
+		for atomic.LoadUint32(&l.currentMessages) > l.maxRate {
+		}
+
 		log.Debugf("%s: %s", msg.Topic, msg.Value)
 		message := &util.Message{
 			InputBuffer: new(bytes.Buffer),
@@ -75,6 +90,7 @@ func (l *KafkaListener) GetStrategy() func(*kafkaClient.Worker, *kafkaClient.Mes
 		message.InputBuffer.Write(msg.Value)
 		l.counter++
 		l.c <- message
+		atomic.AddUint32(&l.currentMessages, 1)
 		return kafkaClient.NewSuccessfulResult(id)
 	}
 }
@@ -162,4 +178,8 @@ func (l *KafkaListener) parseConfig() {
 	l.config.OffsetCommitInterval = 10 * time.Second
 
 	l.config.DeploymentTimeout = 0 * time.Second
+
+	if l.rawConfig["maxrate"] != nil {
+		l.maxRate = uint32(l.rawConfig["maxrate"].(int))
+	}
 }
