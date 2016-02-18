@@ -17,8 +17,11 @@ type KafkaListener struct {
 	c           chan *util.Message
 	messagePool *util.MessagePool
 	topics      []string
+	maxRate     uint32
+	keepSending chan bool
 
-	counter int64
+	counter         int64
+	currentMessages uint32
 
 	config *kafkaClient.ConsumerConfig
 }
@@ -30,6 +33,7 @@ func (l *KafkaListener) Listen(messagePool *util.MessagePool) chan *util.Message
 	// Create the message channel
 	l.c = make(chan *util.Message)
 	l.messagePool = messagePool
+	l.keepSending = make(chan bool)
 
 	// Parse the configuration
 	l.parseConfig()
@@ -52,27 +56,31 @@ func (l *KafkaListener) Listen(messagePool *util.MessagePool) chan *util.Message
 		consumers[0].StartStatic(topics)
 	}()
 
-	// // Start timer for show messages per second
-	// go func() {
-	// 	for {
-	// 		timer := time.NewTimer(1 * time.Second)
-	// 		<-timer.C
-	// 		kafkaLog.Debugf("Fetching %d/s", l.counter)
-	// 		l.counter = 0
-	// 	}
-	// }()
+	go func() {
+		for {
+			timer := time.NewTimer(1 * time.Second)
+			<-timer.C
+			l.keepSending <- true
+		}
+	}()
 
 	return l.c
 }
 
 func (l *KafkaListener) GetStrategy() func(*kafkaClient.Worker, *kafkaClient.Message, kafkaClient.TaskId) kafkaClient.WorkerResult {
 	return func(_ *kafkaClient.Worker, msg *kafkaClient.Message, id kafkaClient.TaskId) kafkaClient.WorkerResult {
+		if l.maxRate > 0 && l.currentMessages >= l.maxRate {
+			<-l.keepSending
+			l.currentMessages = 0
+		}
+
 		log.Debugf("%s: %s", msg.Topic, msg.Value)
 		message := l.messagePool.Take()
 		message.Attributes["path"] = msg.Topic
 		message.InputBuffer.Write(msg.Value)
 		l.counter++
 		l.c <- message
+		l.currentMessages++
 		return kafkaClient.NewSuccessfulResult(id)
 	}
 }
@@ -161,4 +169,8 @@ func (l *KafkaListener) parseConfig() {
 	l.config.OffsetCommitInterval = 10 * time.Second
 
 	l.config.DeploymentTimeout = 0 * time.Second
+
+	if l.rawConfig["maxrate"] != nil {
+		l.maxRate = uint32(l.rawConfig["maxrate"].(int))
+	}
 }
