@@ -13,7 +13,8 @@ import (
 	"github.com/redBorder/rb-forwarder/util"
 )
 
-type HttpSender struct {
+// HTTPSender receives data from pipe and send it via HTTP to an endpoint
+type HTTPSender struct {
 	id          int
 	client      *http.Client
 	batchBuffer map[string]*BatchBuffer
@@ -24,9 +25,10 @@ type HttpSender struct {
 
 	// Configuration
 	rawConfig util.Config
-	config    HttpSenderConfig
+	config    httpSenderConfig
 }
 
+// BatchBuffer stores multiple messages to send it in one HTTP Post body
 type BatchBuffer struct {
 	buff         *bytes.Buffer
 	writer       io.Writer
@@ -35,8 +37,8 @@ type BatchBuffer struct {
 	messageCount int64
 }
 
-type HttpSenderConfig struct {
-	Url          string
+type httpSenderConfig struct {
+	URL          string
 	IgnoreCert   bool
 	Deflate      bool
 	ShowCounter  bool
@@ -45,7 +47,7 @@ type HttpSenderConfig struct {
 }
 
 // Init initializes an HTTP sender
-func (s *HttpSender) Init(id int) error {
+func (s *HTTPSender) Init(id int) error {
 	s.parseConfig()
 	s.id = id
 
@@ -78,7 +80,7 @@ func (s *HttpSender) Init(id int) error {
 
 // Send stores a message received from the pipeline into a buffer to perform
 // batching.
-func (s *HttpSender) Send(message *util.Message) error {
+func (s *HTTPSender) Send(message *util.Message) error {
 
 	// We can send batch only for messages with the same path
 	path := message.Attributes["path"]
@@ -143,7 +145,7 @@ func (s *HttpSender) Send(message *util.Message) error {
 	return nil
 }
 
-func (s *HttpSender) batchSend(batchBuffer *BatchBuffer, path string) {
+func (s *HTTPSender) batchSend(batchBuffer *BatchBuffer, path string) {
 
 	// Stop the timeout timer
 	batchBuffer.timer.Stop()
@@ -154,7 +156,7 @@ func (s *HttpSender) batchSend(batchBuffer *BatchBuffer, path string) {
 	}
 
 	// Create the HTTP POST request
-	req, err := http.NewRequest("POST", s.config.Url+"/"+path, batchBuffer.buff)
+	req, err := http.NewRequest("POST", s.config.URL+"/"+path, batchBuffer.buff)
 	if err != nil {
 		log.Errorf("Error creating request: %s", err.Error())
 		goto FINISH
@@ -172,10 +174,10 @@ func (s *HttpSender) batchSend(batchBuffer *BatchBuffer, path string) {
 		goto FINISH
 	}
 
-	log.Debugf("Sending %d messages to %s", batchBuffer.messageCount, s.config.Url+"/"+path)
+	log.Debugf("Sending %d messages to %s", batchBuffer.messageCount, s.config.URL+"/"+path)
 
 	// Statistics
-	s.counter++
+	s.counter += batchBuffer.messageCount
 
 FINISH:
 
@@ -195,9 +197,9 @@ FINISH:
 }
 
 // Parse the config from YAML file
-func (s *HttpSender) parseConfig() {
+func (s *HTTPSender) parseConfig() {
 	if s.rawConfig["url"] != nil {
-		s.config.Url = s.rawConfig["url"].(string)
+		s.config.URL = s.rawConfig["url"].(string)
 	} else {
 		log.Fatal("No url provided")
 	}

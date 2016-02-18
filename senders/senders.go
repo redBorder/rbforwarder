@@ -18,7 +18,7 @@ func NewSender(config util.ElementConfig) Sender {
 
 	switch config.Type {
 	case "http":
-		return &HttpSender{
+		return &HTTPSender{
 			rawConfig: config.Config,
 		}
 		break
