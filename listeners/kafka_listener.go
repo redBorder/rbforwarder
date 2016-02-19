@@ -123,7 +123,6 @@ func (l *KafkaListener) parseConfig() {
 	}
 
 	l.config = kafkaClient.DefaultConsumerConfig()
-	l.config.Groupid = "rb_forwarder"
 
 	// Worker
 	l.config.NumWorkers = 1
@@ -172,5 +171,10 @@ func (l *KafkaListener) parseConfig() {
 
 	if l.rawConfig["maxrate"] != nil {
 		l.maxRate = uint32(l.rawConfig["maxrate"].(int))
+	}
+	if l.rawConfig["consumerid"] != nil {
+		l.config.Groupid = l.rawConfig["consumerid"].(string)
+	} else {
+		l.config.Groupid = "rb_forwarder"
 	}
 }
