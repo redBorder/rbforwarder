@@ -1,5 +1,11 @@
-image:https://travis-ci.org/redBorder/rbforwarder.svg?branch=master["Build Status", link="https://travis-ci.org/redBorder/rbforwarder"]
+.Builds
 
+|===
+| Master | Develop
+
+| image:https://travis-ci.org/redBorder/rbforwarder.svg?branch=master["Build Status", link="https://travis-ci.org/redBorder/rbforwarder"]
+| image:https://travis-ci.org/redBorder/rbforwarder.svg?branch=develop["Build Status", link="https://travis-ci.org/redBorder/rbforwarder"]
+|===
 
 = rbforwarder
 
