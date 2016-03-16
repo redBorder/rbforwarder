@@ -12,15 +12,15 @@ var log *logrus.Entry
 
 // Config is used to store the compopnents configuration
 type Config struct {
-	Listener  ListenerConfig  `yaml:"listener"`
+	Source    SourceConfig    `yaml:"source"`
 	Decoder   DecoderConfig   `yaml:"decoder"`
 	Processor ProcessorConfig `yaml:"processor"`
 	Encoder   EncoderConfig   `yaml:"encoder"`
 	Sender    SenderConfig    `yaml:"sender"`
 }
 
-// ListenerConfig stores listener specific configuration
-type ListenerConfig struct {
+// SourceConfig stores source specific configuration
+type SourceConfig struct {
 	Type   string                 `yaml:"type"`
 	Config map[string]interface{} `yaml:"config"`
 }
@@ -110,8 +110,8 @@ func NewRBForwarder(workers, queueSize int) *RBForwarder {
 // Start spawn the workers
 func (f *RBForwarder) Start() {
 	// Start listening
-	f.backend.listener.Listen(f)
-	log.Info("Listener ready")
+	f.backend.source.Listen(f)
+	log.Info("Source ready")
 
 	for i := 0; i < f.workers; i++ {
 		f.backend.startDecoder(i)
@@ -122,7 +122,7 @@ func (f *RBForwarder) Start() {
 
 	<-f.close
 
-	f.backend.listener.Close()
+	f.backend.source.Close()
 }
 
 // Close stops the workers
@@ -130,9 +130,9 @@ func (f *RBForwarder) Close() {
 	f.close <- struct{}{}
 }
 
-// SetListener set a listener on the backend
-func (f *RBForwarder) SetListener(listener Listener) {
-	f.backend.listener = listener
+// SetSource set a source on the backend
+func (f *RBForwarder) SetSource(source Source) {
+	f.backend.source = source
 }
 
 // SetSender set a sender on the backend
@@ -151,7 +151,7 @@ func (f *RBForwarder) TakeMessage() (message *Message, err error) {
 	return
 }
 
-// GetReports is used by the listener to get a report for a sent message.
+// GetReports is used by the source to get a report for a sent message.
 // Reports are delivered on the same order that was sent
 func (f *RBForwarder) GetReports() <-chan Report {
 	reports := make(chan Report)

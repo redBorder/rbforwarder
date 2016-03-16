@@ -2,9 +2,9 @@ package rbforwarder
 
 import "os"
 
-// Listener is the component that gets data from a source, then sends the data
+// Source is the component that gets data from a source, then sends the data
 // to the backend.
-type Listener interface {
+type Source interface {
 	Listen(Forwarder)
 	Close()
 }
@@ -34,7 +34,7 @@ type Sender interface {
 }
 
 type backend struct {
-	listener  Listener
+	source    Source
 	decoder   Decoder
 	processor Processor
 	encoder   Encoder

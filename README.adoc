@@ -113,7 +113,7 @@ This is an example config file for a MQTT to HTTP with json decoding/encoding:
 
 [source,yaml]
 ----
-listener:
+source:
   type: "kafka"
   config:
     broker: "localhost:2181"

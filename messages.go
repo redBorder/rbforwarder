@@ -12,7 +12,7 @@ const (
 
 // Message is used to send data to the backend
 type Message struct {
-	InputBuffer  *bytes.Buffer          // The original data from the listener
+	InputBuffer  *bytes.Buffer          // The original data from the source
 	Data         interface{}            // Can be used to store the data once it has been parsed
 	OutputBuffer *bytes.Buffer          // The data that will be sent by the sender
 	Metadata     map[string]interface{} // Opaque
@@ -21,7 +21,7 @@ type Message struct {
 	backend *backend // Use to send the message to the backend
 }
 
-// Produce is used by the listener to send messages to the backend
+// Produce is used by the source to send messages to the backend
 func (m *Message) Produce() error {
 	select {
 	case messageChannel := <-m.backend.decoderPool:
@@ -85,7 +85,7 @@ func (m *Message) Fail(statusCode int, status string) error {
 	return nil
 }
 
-// Report is used by the listener to obtain the status of a sent message
+// Report is used by the source to obtain the status of a sent message
 type Report struct {
 	ID         int64                  // Unique ID for the report, used to maintain sequence
 	Status     string                 // Result of the sending
