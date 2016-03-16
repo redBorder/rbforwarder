@@ -1,0 +1,24 @@
+language: go
+
+sudo: false
+
+branches:
+  only:
+    - master
+
+go:
+- 1.5.2
+
+script:
+  - $HOME/gopath/bin/goveralls
+
+install:
+- make get
+- make get_dev
+
+script:
+- make check
+- make test
+
+after_script:
+- make coverage
