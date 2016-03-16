@@ -10,8 +10,8 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/redBorder/rbforwarder"
-	"github.com/redBorder/rbforwarder/listeners"
 	"github.com/redBorder/rbforwarder/senders"
+	"github.com/redBorder/rbforwarder/sources"
 )
 
 var (
@@ -56,7 +56,7 @@ func main() {
 		forwarder.Close()
 	}()
 
-	forwarder.SetListener(listeners.NewListener(config.Listener))
+	forwarder.SetListener(sources.NewListener(config.Listener))
 	forwarder.SetSender(senders.NewSender(config.Sender))
 
 	forwarder.Start()

@@ -11,14 +11,7 @@ var log *logrus.Entry
 // argument
 func NewSender(config rbforwarder.SenderConfig) (sender rbforwarder.Sender) {
 	switch config.Type {
-	case "http":
-		sender = &HTTPSender{
-			rawConfig: config.Config,
-		}
 	default:
-		sender = &StdoutSender{
-			rawConfig: config.Config,
-		}
 	}
 
 	return
