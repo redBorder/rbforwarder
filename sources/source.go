@@ -1,4 +1,4 @@
-package listeners
+package sources
 
 import (
 	"github.com/Sirupsen/logrus"
@@ -11,10 +11,7 @@ var log *logrus.Entry
 // as argument
 func NewListener(config rbforwarder.ListenerConfig) (listener rbforwarder.Listener) {
 	switch config.Type {
-	case "kafka":
-		listener = &KafkaListener{
-			rawConfig: config.Config,
-		}
+	default:
 	}
 
 	return
