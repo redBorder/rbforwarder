@@ -7,9 +7,9 @@ import (
 
 var log *logrus.Entry
 
-// NewListener creates a new listener depending on the configuration passed
+// NewSource creates a new source depending on the configuration passed
 // as argument
-func NewListener(config rbforwarder.ListenerConfig) (listener rbforwarder.Listener) {
+func NewSource(config rbforwarder.SourceConfig) (source rbforwarder.Source) {
 	switch config.Type {
 	default:
 	}

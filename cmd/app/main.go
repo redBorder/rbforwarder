@@ -56,7 +56,7 @@ func main() {
 		forwarder.Close()
 	}()
 
-	forwarder.SetListener(sources.NewListener(config.Listener))
+	forwarder.SetSource(sources.NewSource(config.Source))
 	forwarder.SetSender(senders.NewSender(config.Sender))
 
 	forwarder.Start()
