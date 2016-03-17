@@ -152,13 +152,17 @@ func (f *RBForwarder) TakeMessage() (message *Message, err error) {
 // Reports are delivered on the same order that was sent
 func (f *RBForwarder) GetReports() <-chan Report {
 	f.reports = make(chan Report)
-	var currentid int64
 
 	go func() {
+
+		// Get reports from the channel
 		for message := range f.backend.reports {
-			report := message.report
-			if report.ID == f.backend.currentProcessedID {
-				if report.StatusCode == 0 {
+
+			if message.report.ID == f.backend.currentProcessedID {
+
+				// Only takes the expected report ID
+				if message.report.StatusCode == 0 {
+
 					// Success
 					message.InputBuffer.Reset()
 					message.OutputBuffer.Reset()
@@ -168,16 +172,31 @@ func (f *RBForwarder) GetReports() <-chan Report {
 					// Send back the message to the pool
 					select {
 					case f.backend.messagePool <- message:
+						f.backend.currentProcessedID++
 					case <-time.After(1 * time.Second):
 						logger.Error("Can't put back the message on the pool")
 					}
+
+					// Send to the source a copy of the report
+					report := message.report
+					message.report = Report{}
+
+					select {
+					case f.reports <- report:
+					case <-time.After(1 * time.Second):
+						logger.Error("Error on report: Full queue")
+					}
 				} else {
+
 					// Fail
-					if f.backend.retries < 0 || report.Retries < f.backend.retries {
+					if f.backend.retries < 0 || message.report.Retries < f.backend.retries {
 						// Retry this message
-						report.Retries++
-						message.Produce()
+						message.report.Retries++
+						if err := message.Produce(); err != nil {
+							logger.Error(err)
+						}
 					} else {
+
 						// Give up
 						message.InputBuffer.Reset()
 						message.OutputBuffer.Reset()
@@ -187,25 +206,26 @@ func (f *RBForwarder) GetReports() <-chan Report {
 						// Send back the message to the pool
 						select {
 						case f.backend.messagePool <- message:
+							f.backend.currentProcessedID++
 						case <-time.After(1 * time.Second):
 							logger.Error("Can't put back the message on the pool")
+						}
+
+						// Send to the source a copy of the report
+						report := message.report
+						message.report = Report{}
+
+						select {
+						case f.reports <- report:
+						case <-time.After(1 * time.Second):
+							logger.Error("Error on report: Full queue")
 						}
 					}
 				}
 
-				select {
-				case f.reports <- report:
-					f.backend.currentProcessedID++
-				case <-time.After(1 * time.Second):
-					logger.Error("Error on report: Full queue")
-				}
 			} else {
-				// Requeue the report if is not the expected
-				if currentid != f.backend.currentProcessedID {
-					logger.Warnf("Expected report [%d], got [%d]",
-						f.backend.currentProcessedID, report.ID)
-					currentid = f.backend.currentProcessedID
-				}
+
+				// Requeue the report if is not the expected ID
 				select {
 				case f.backend.reports <- message:
 				case <-time.After(1 * time.Second):

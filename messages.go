@@ -33,9 +33,13 @@ type Message struct {
 
 // Produce is used by the source to send messages to the backend
 func (m *Message) Produce() error {
-	m.report = Report{
-		ID:       atomic.AddInt64(&m.backend.currentProducedID, 1) - 1,
-		Metadata: m.Metadata,
+
+	// This is no a retry
+	if m.report.Retries == 0 {
+		m.report = Report{
+			ID:       atomic.AddInt64(&m.backend.currentProducedID, 1) - 1,
+			Metadata: m.Metadata,
+		}
 	}
 
 	select {
