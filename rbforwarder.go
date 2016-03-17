@@ -2,13 +2,12 @@ package rbforwarder
 
 import (
 	"bytes"
-	"errors"
 	"time"
 
 	"github.com/Sirupsen/logrus"
 )
 
-var log *logrus.Entry
+var logger *logrus.Entry
 
 // Config is used to store the compopnents configuration
 type Config struct {
@@ -106,7 +105,7 @@ type RBForwarder struct {
 
 // NewRBForwarder creates a new Forwarder object
 func NewRBForwarder(workers, queueSize int) *RBForwarder {
-	log = NewLogger("forwarder")
+	logger = NewLogger("forwarder")
 
 	forwarder := &RBForwarder{
 		backend: &backend{
@@ -139,7 +138,7 @@ func NewRBForwarder(workers, queueSize int) *RBForwarder {
 		"workers":    workers,
 		"queue_size": queueSize,
 	}
-	log.WithFields(fields).Info("Initialized rB Forwarder")
+	logger.WithFields(fields).Info("Initialized rB Forwarder")
 
 	return forwarder
 }
@@ -148,7 +147,7 @@ func NewRBForwarder(workers, queueSize int) *RBForwarder {
 func (f *RBForwarder) Start() {
 	// Start listening
 	f.backend.source.Listen(f)
-	log.Info("Source ready")
+	logger.Info("Source ready")
 
 	for i := 0; i < f.workers; i++ {
 		f.backend.startDecoder(i)
@@ -223,7 +222,7 @@ func (f *RBForwarder) GetReports() <-chan Report {
 						select {
 						case f.backend.messagePool <- message:
 						case <-time.After(1 * time.Second):
-							log.Error("Can't put back the message on the pool")
+							logger.Error("Can't put back the message on the pool")
 						}
 					}
 				}
@@ -232,14 +231,19 @@ func (f *RBForwarder) GetReports() <-chan Report {
 				case f.reports <- report:
 					f.backend.currentProcessedID++
 				case <-time.After(1 * time.Second):
-					log.Error("Error on report: Full queue")
+					logger.Error("Error on report: Full queue")
 				}
 			} else {
 				// Requeue the report if is not the expected
+				if currentid != f.backend.currentProcessedID {
+					logger.Warnf("Expected report [%d], got [%d]",
+						f.backend.currentProcessedID, report.ID)
+					currentid = f.backend.currentProcessedID
+				}
 				select {
 				case f.backend.reports <- message:
 				case <-time.After(1 * time.Second):
-					log.Error("Error on report: Full queue")
+					logger.Error("Error on report: Full queue")
 				}
 			}
 		}
