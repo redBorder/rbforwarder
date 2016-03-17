@@ -47,63 +47,63 @@ in reporting system, so you can know if the messages has been delivered.
 
 | 0.1
 | Core
-| 0.0%
+| _Testing_
 
 | 0.2
 | Backend
-| 0.0%
+| _Testing_
 
 | 0.3
 | Stdout Sender
-| 0.0%
+| _In progress_
 
 | 0.3
 | JSON Decoder
-| 0.0%
+| _Pending_
 
 | 0.3
 | JSON Encoder
-| 0.0%
+| _Pending_
 
 | 0.3
 | JSON Template Processor
-| 0.0%
+| _Pending_
 
 | 0.4
 | Kafka Consumer
-| 0.0%
+| _In progress_
 
 | 0.5
 | HTTP Sender
-| 0.0%
+| _In progress_
 
 | 0.6
 | MQTT Suscriber
-| 0.0%
+| _Pending_
 
 | 0.6
 | MQTT Publisher
-| 0.0%
+| _Pending_
 
 | 0.7
 | Kafka Producer
-| 0.0%
+| _Pending_
 
 | 0.7
 | HTTP Listener
-| 0.0%
+| _Pending_
 
 | 0.8
 | InfluxDB metrics
-| 0.0%
+| _Pending_
 
 | 0.9
 | e2e testing
-| 0.0%
+| _Pending_
 
 | 1.0
 | Benchmarks
-| 0.0%
+| _Pending_
 
 |===
 
