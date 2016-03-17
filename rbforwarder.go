@@ -9,45 +9,6 @@ import (
 
 var logger *logrus.Entry
 
-// Config is used to store the compopnents configuration
-type Config struct {
-	Source    SourceConfig    `yaml:"source"`
-	Decoder   DecoderConfig   `yaml:"decoder"`
-	Processor ProcessorConfig `yaml:"processor"`
-	Encoder   EncoderConfig   `yaml:"encoder"`
-	Sender    SenderConfig    `yaml:"sender"`
-}
-
-// SourceConfig stores source specific configuration
-type SourceConfig struct {
-	Type   string                 `yaml:"type"`
-	Config map[string]interface{} `yaml:"config"`
-}
-
-// DecoderConfig stores decoder specific configuration
-type DecoderConfig struct {
-	Type   string                 `yaml:"type"`
-	Config map[string]interface{} `yaml:"config"`
-}
-
-// ProcessorConfig stores processor specific configuration
-type ProcessorConfig struct {
-	Type   string                 `yaml:"type"`
-	Config map[string]interface{} `yaml:"config"`
-}
-
-// EncoderConfig stores encoder specific configuration
-type EncoderConfig struct {
-	Type   string                 `yaml:"type"`
-	Config map[string]interface{} `yaml:"config"`
-}
-
-// SenderConfig stores sender specific configuration
-type SenderConfig struct {
-	Type   string                 `yaml:"type"`
-	Config map[string]interface{} `yaml:"config"`
-}
-
 // Source is the component that gets data from a source, then sends the data
 // to the backend.
 type Source interface {
