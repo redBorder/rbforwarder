@@ -46,7 +46,6 @@ func (m *Message) Produce() error {
 	case messageChannel := <-m.backend.decoderPool:
 		select {
 		case messageChannel <- m:
-			logger.Printf("Producing message ID: [%d]", m.report.ID)
 		case <-time.After(1 * time.Second):
 			return errors.New("Error on produce: Full queue")
 		}
@@ -61,7 +60,6 @@ func (m *Message) Produce() error {
 
 // Report is used by the sender to inform that a message has not been sent
 func (m *Message) Report(statusCode int, status string) error {
-	logger.Printf("Reporting [%d]", m.report.ID)
 	m.report.StatusCode = statusCode
 	m.report.Status = status
 	select {
