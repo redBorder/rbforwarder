@@ -19,7 +19,7 @@ type backend struct {
 	currentProcessedID int64
 
 	messages chan *Message
-	reports  chan Report
+	reports  chan *Message
 
 	messagePool chan *Message
 }

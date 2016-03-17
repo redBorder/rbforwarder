@@ -17,7 +17,7 @@ type Message struct {
 	OutputBuffer *bytes.Buffer          // The data that will be sent by the sender
 	Metadata     map[string]interface{} // Opaque
 
-	retries int      // Number of retries of this message
+	report  Report
 	backend *backend // Use to send the message to the backend
 }
 

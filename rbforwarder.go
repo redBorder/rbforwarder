@@ -96,6 +96,7 @@ type Forwarder interface {
 // workers
 type RBForwarder struct {
 	backend *backend
+	reports chan Report
 
 	retries int
 	workers int
@@ -115,7 +116,7 @@ func NewRBForwarder(workers, queueSize int) *RBForwarder {
 			senderPool:    make(chan chan *Message, workers),
 
 			messages: make(chan *Message, queueSize),
-			reports:  make(chan Report, queueSize),
+			reports:  make(chan *Message, queueSize),
 
 			messagePool: make(chan *Message, queueSize),
 		},
@@ -171,62 +172,56 @@ func (f *RBForwarder) SetSource(source Source) {
 	f.backend.source = source
 }
 
-// SetSender set a sender on the backend
-func (f *RBForwarder) SetSender(sender Sender) {
-	f.backend.sender = sender
+// SetSenderHelper set a sender on the backend
+func (f *RBForwarder) SetSenderHelper(SenderHelper SenderHelper) {
+	f.backend.senderHelper = SenderHelper
 }
 
 // TakeMessage returns a message from the message pool
 func (f *RBForwarder) TakeMessage() (message *Message, err error) {
-	select {
-	case message = <-f.backend.messagePool:
-	case <-time.After(1 * time.Second):
-		err = errors.New("No messages available on the pool")
-	}
-
+	message = <-f.backend.messagePool
 	return
 }
 
 // GetReports is used by the source to get a report for a sent message.
 // Reports are delivered on the same order that was sent
 func (f *RBForwarder) GetReports() <-chan Report {
-	reports := make(chan Report)
+	f.reports = make(chan Report)
+	var currentid int64
 
 	go func() {
-		for report := range f.backend.reports {
+		for message := range f.backend.reports {
+			report := message.report
 			if report.ID == f.backend.currentProcessedID {
-
 				if report.StatusCode == 0 {
 					// Success
-					report.message.InputBuffer.Reset()
-					report.message.OutputBuffer.Reset()
-					report.message.Data = nil
-					report.message.Metadata = make(map[string]interface{})
-					report.message.retries = 0
+					message.InputBuffer.Reset()
+					message.OutputBuffer.Reset()
+					message.Data = nil
+					message.Metadata = make(map[string]interface{})
 
 					// Send back the message to the pool
 					select {
-					case f.backend.messagePool <- report.message:
+					case f.backend.messagePool <- message:
 					case <-time.After(1 * time.Second):
 						log.Error("Can't put back the message on the pool")
 					}
 				} else {
 					// Fail
-					if f.retries < 0 || report.message.retries < f.retries {
+					if f.retries < 0 || report.Retries < f.retries {
 						// Retry this message
-						report.message.retries++
-						report.message.Produce()
+						report.Retries++
+						message.Retry() // TODO Hacer algo con la ID porque ya no se vuelve a leer
 					} else {
 						// Give up
-						report.message.InputBuffer.Reset()
-						report.message.OutputBuffer.Reset()
-						report.message.Data = nil
-						report.message.Metadata = make(map[string]interface{})
-						report.message.retries = 0
+						message.InputBuffer.Reset()
+						message.OutputBuffer.Reset()
+						message.Data = nil
+						message.Metadata = make(map[string]interface{})
 
 						// Send back the message to the pool
 						select {
-						case f.backend.messagePool <- report.message:
+						case f.backend.messagePool <- message:
 						case <-time.After(1 * time.Second):
 							log.Error("Can't put back the message on the pool")
 						}
@@ -234,7 +229,7 @@ func (f *RBForwarder) GetReports() <-chan Report {
 				}
 
 				select {
-				case reports <- report:
+				case f.reports <- report:
 					f.backend.currentProcessedID++
 				case <-time.After(1 * time.Second):
 					log.Error("Error on report: Full queue")
@@ -242,7 +237,7 @@ func (f *RBForwarder) GetReports() <-chan Report {
 			} else {
 				// Requeue the report if is not the expected
 				select {
-				case f.backend.reports <- report:
+				case f.backend.reports <- message:
 				case <-time.After(1 * time.Second):
 					log.Error("Error on report: Full queue")
 				}
@@ -250,5 +245,5 @@ func (f *RBForwarder) GetReports() <-chan Report {
 		}
 	}()
 
-	return reports
+	return f.reports
 }
