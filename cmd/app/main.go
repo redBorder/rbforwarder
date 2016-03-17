@@ -3,15 +3,16 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
 
+	"gopkg.in/yaml.v2"
+
 	"github.com/Sirupsen/logrus"
 	"github.com/redBorder/rbforwarder"
-	"github.com/redBorder/rbforwarder/senders"
-	"github.com/redBorder/rbforwarder/sources"
 )
 
 var (
@@ -37,7 +38,7 @@ func init() {
 }
 
 func main() {
-	config, err := loadConfigFile(*configFile)
+	_, err := loadConfigFile(*configFile)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -56,8 +57,18 @@ func main() {
 		forwarder.Close()
 	}()
 
-	forwarder.SetSource(sources.NewSource(config.Source))
-	forwarder.SetSender(senders.NewSender(config.Sender))
-
 	forwarder.Start()
+}
+
+func loadConfigFile(fileName string) (config map[string]interface{}, err error) {
+	configData, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		return
+	}
+
+	if err = yaml.Unmarshal([]byte(configData), &config); err != nil {
+		return
+	}
+
+	return
 }
