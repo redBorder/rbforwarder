@@ -149,6 +149,7 @@ func (s *HTTPSender) Send(message *util.Message) error {
 }
 
 func (s *HTTPSender) batchSend(batchBuffer *BatchBuffer, path string) {
+	var res *http.Response
 
 	// Stop the timeout timer
 	batchBuffer.timer.Stop()
@@ -171,11 +172,12 @@ func (s *HTTPSender) batchSend(batchBuffer *BatchBuffer, path string) {
 	}
 
 	// Send the HTTP POST request
-	_, err = s.client.Do(req)
+	res, err = s.client.Do(req)
 	if err != nil {
 		log.Errorf("Error sending request: %s", err.Error())
 		goto FINISH
 	}
+	defer res.Body.Close()
 
 	log.Debugf("Sending %d messages to %s", batchBuffer.messageCount, s.config.URL+"/"+path)
 
