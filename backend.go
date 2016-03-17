@@ -3,11 +3,11 @@ package rbforwarder
 import "sync"
 
 type backend struct {
-	source    Source
-	decoder   Decoder
-	processor Processor
-	encoder   Encoder
-	sender    Sender
+	source       Source
+	decoder      Decoder
+	processor    Processor
+	encoder      Encoder
+	senderHelper SenderHelper
 
 	// Pool of workers
 	decoderPool   chan chan *Message
@@ -116,18 +116,20 @@ func (b *backend) startEncoder(i int) {
 
 // Worker that sends the message
 func (b *backend) startSender(i int) {
-	if b.sender == nil {
-		os.Exit(1)
+	if b.senderHelper == nil {
+		logger.Fatal("No sender provided")
 	}
 
-	b.sender.Init(i)
+	sender := b.senderHelper.CreateSender()
+	sender.Init(i)
+
 	workerChannel := make(chan *Message)
 
 	go func() {
 		for {
 			b.senderPool <- workerChannel
 			message := <-workerChannel
-			b.sender.Send(message)
+			sender.Send(message)
 		}
 	}()
 }
