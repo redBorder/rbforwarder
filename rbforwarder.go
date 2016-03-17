@@ -204,14 +204,14 @@ func (f *RBForwarder) GetReports() <-chan Report {
 					select {
 					case f.backend.messagePool <- message:
 					case <-time.After(1 * time.Second):
-						log.Error("Can't put back the message on the pool")
+						logger.Error("Can't put back the message on the pool")
 					}
 				} else {
 					// Fail
 					if f.retries < 0 || report.Retries < f.retries {
 						// Retry this message
 						report.Retries++
-						message.Retry() // TODO Hacer algo con la ID porque ya no se vuelve a leer
+						message.Produce()
 					} else {
 						// Give up
 						message.InputBuffer.Reset()
