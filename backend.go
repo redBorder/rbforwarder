@@ -16,10 +16,12 @@ type backend struct {
 	currentProducedID  int64
 	currentProcessedID int64
 
-	messages chan *Message
-	reports  chan *Message
-
+	messages    chan *Message
+	reports     chan *Message
 	messagePool chan *Message
+
+	workers int
+	retries int
 }
 
 // Worker that decodes the received message

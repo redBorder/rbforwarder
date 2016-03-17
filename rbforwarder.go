@@ -57,35 +57,39 @@ type Forwarder interface {
 type RBForwarder struct {
 	backend *backend
 	reports chan Report
+	close   chan struct{}
+}
 
-	retries int
-	workers int
-
-	close chan struct{}
+// Config stores the configuration for a forwarder
+type Config struct {
+	Retries   int
+	Workers   int
+	QueueSize int
 }
 
 // NewRBForwarder creates a new Forwarder object
-func NewRBForwarder(workers, queueSize int) *RBForwarder {
+func NewRBForwarder(config Config) *RBForwarder {
 	logger = NewLogger("forwarder")
 
 	forwarder := &RBForwarder{
 		backend: &backend{
-			decoderPool:   make(chan chan *Message, workers),
-			processorPool: make(chan chan *Message, workers),
-			encoderPool:   make(chan chan *Message, workers),
-			senderPool:    make(chan chan *Message, workers),
+			decoderPool:   make(chan chan *Message, config.Workers),
+			processorPool: make(chan chan *Message, config.Workers),
+			encoderPool:   make(chan chan *Message, config.Workers),
+			senderPool:    make(chan chan *Message, config.Workers),
 
-			messages: make(chan *Message, queueSize),
-			reports:  make(chan *Message, queueSize),
+			messages:    make(chan *Message, config.QueueSize),
+			reports:     make(chan *Message, config.QueueSize),
+			messagePool: make(chan *Message, config.QueueSize),
 
-			messagePool: make(chan *Message, queueSize),
+			workers: config.Workers,
+			retries: config.Retries,
 		},
-		workers: workers,
 	}
 
 	forwarder.close = make(chan struct{})
 
-	for i := 0; i < queueSize; i++ {
+	for i := 0; i < config.QueueSize; i++ {
 		forwarder.backend.messagePool <- &Message{
 			Metadata:     make(map[string]interface{}),
 			InputBuffer:  new(bytes.Buffer),
@@ -96,8 +100,9 @@ func NewRBForwarder(workers, queueSize int) *RBForwarder {
 	}
 
 	fields := logrus.Fields{
-		"workers":    workers,
-		"queue_size": queueSize,
+		"workers":    config.Workers,
+		"retries":    config.Retries,
+		"queue_size": config.QueueSize,
 	}
 	logger.WithFields(fields).Info("Initialized rB Forwarder")
 
@@ -110,7 +115,7 @@ func (f *RBForwarder) Start() {
 	f.backend.source.Listen(f)
 	logger.Info("Source ready")
 
-	for i := 0; i < f.workers; i++ {
+	for i := 0; i < f.backend.workers; i++ {
 		f.backend.startDecoder(i)
 		f.backend.startProcessor(i)
 		f.backend.startEncoder(i)
@@ -168,7 +173,7 @@ func (f *RBForwarder) GetReports() <-chan Report {
 					}
 				} else {
 					// Fail
-					if f.retries < 0 || report.Retries < f.retries {
+					if f.backend.retries < 0 || report.Retries < f.backend.retries {
 						// Retry this message
 						report.Retries++
 						message.Produce()
