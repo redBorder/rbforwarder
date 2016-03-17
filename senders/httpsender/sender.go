@@ -71,7 +71,7 @@ func (s *Sender) Init(id int) error {
 	}
 	s.client = &http.Client{Transport: tr}
 
-	logger.WithField("worker", s.id).WithFields(s.rawConfig).Infof("[%d] HTTP Sender ready", s.id)
+	logger.WithField("worker", s.id).WithFields(s.rawConfig).Infof("HTTP Sender ready")
 
 	// A map to store buffers for each endpoint
 	s.batchBuffer = make(map[string]*batchBuffer)
@@ -81,7 +81,7 @@ func (s *Sender) Init(id int) error {
 			for {
 				timer := time.NewTimer(time.Duration(s.config.ShowCounter) * time.Second)
 				<-timer.C
-				logger.WithField("worker", s.id).Debugf("Messages per second %d", s.counter/int64(s.config.ShowCounter))
+				logger.WithField("worker", s.id).Infof("Messages per second %d", s.counter/int64(s.config.ShowCounter))
 				s.counter = 0
 			}
 		}()
@@ -196,7 +196,7 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	if err != nil {
 		logger.Errorf("Error creating request: %s", err.Error())
 		for _, message := range batchBuffer.messages {
-			message.Fail(errRequest, err.Error())
+			message.Report(errRequest, err.Error())
 		}
 		return
 	}
@@ -209,9 +209,8 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	// Send the HTTP POST request
 	res, err := s.client.Do(req)
 	if err != nil {
-		logger.Errorf("Error sending request: %s", err.Error())
 		for _, message := range batchBuffer.messages {
-			message.Fail(errHTTP, err.Error())
+			message.Report(errHTTP, err.Error())
 		}
 		return
 	}
@@ -220,14 +219,14 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	// Send the reports
 	if res.StatusCode >= 400 {
 		for _, message := range batchBuffer.messages {
-			if err := message.Fail(errStatus, res.Status); err != nil {
+			if err := message.Report(errStatus, res.Status); err != nil {
 				logger.Error(err)
 			}
 		}
 	} else {
 		for _, message := range batchBuffer.messages {
 			time.Sleep(time.Duration((rand.Int31n(1500))) * time.Millisecond)
-			if err := message.Ack(res.Status); err != nil {
+			if err := message.Report(0, res.Status); err != nil {
 				logger.Error(err)
 			}
 		}
