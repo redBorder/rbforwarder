@@ -6,7 +6,6 @@ import (
 	"compress/zlib"
 	"crypto/tls"
 	"io"
-	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -225,7 +224,6 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 		}
 	} else {
 		for _, message := range batchBuffer.messages {
-			time.Sleep(time.Duration((rand.Int31n(1500))) * time.Millisecond)
 			if err := message.Report(0, res.Status); err != nil {
 				logger.Error(err)
 			}
