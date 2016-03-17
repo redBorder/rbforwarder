@@ -3,12 +3,22 @@ package rbforwarder
 import (
 	"bytes"
 	"errors"
+	"sync/atomic"
 	"time"
 )
 
 const (
 	statusOk = 0
 )
+
+// Report is used by the source to obtain the status of a sent message
+type Report struct {
+	ID         int64  // Unique ID for the report, used to maintain sequence
+	Status     string // Result of the sending
+	StatusCode int    // Result of the sending
+	Retries    int
+	Metadata   map[string]interface{}
+}
 
 // Message is used to send data to the backend
 type Message struct {
@@ -23,74 +33,38 @@ type Message struct {
 
 // Produce is used by the source to send messages to the backend
 func (m *Message) Produce() error {
+	m.report = Report{
+		ID:       atomic.AddInt64(&m.backend.currentProducedID, 1) - 1,
+		Metadata: m.Metadata,
+	}
+
 	select {
 	case messageChannel := <-m.backend.decoderPool:
 		select {
 		case messageChannel <- m:
+			logger.Printf("Producing message ID: [%d]", m.report.ID)
 		case <-time.After(1 * time.Second):
 			return errors.New("Error on produce: Full queue")
 		}
 	case <-time.After(1 * time.Second):
-		return errors.New("Error on produce: No workers available")
+		if err := m.Report(-1, "Error on produce: No workers available"); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-// Ack is used by the sender acknowledge a message
-func (m *Message) Ack(status string) error {
-	report := Report{
-		ID:         m.backend.currentProducedID,
-		StatusCode: statusOk,
-		Status:     status,
-		Metadata:   m.Metadata,
-
-		message: m,
-	}
-
+// Report is used by the sender to inform that a message has not been sent
+func (m *Message) Report(statusCode int, status string) error {
+	logger.Printf("Reporting [%d]", m.report.ID)
+	m.report.StatusCode = statusCode
+	m.report.Status = status
 	select {
-	case m.backend.reports <- report:
-		m.backend.currentProducedID++
+	case m.backend.reports <- m:
 	case <-time.After(1 * time.Second):
 		return errors.New("Error on report: Full queue")
 	}
 
 	return nil
-}
-
-// Fail is used by the sender to inform that a message has not been sent
-func (m *Message) Fail(statusCode int, status string) error {
-
-	// If statusCode is zero, it's actually an Ack
-	if statusCode == 0 {
-		return m.Ack(status)
-	}
-
-	report := Report{
-		ID:         m.backend.currentProducedID,
-		StatusCode: statusCode,
-		Status:     status,
-		Metadata:   m.Metadata,
-
-		message: m,
-	}
-
-	select {
-	case m.backend.reports <- report:
-		m.backend.currentProducedID++
-	case <-time.After(1 * time.Second):
-		return errors.New("Error on report: Full queue")
-	}
-
-	return nil
-}
-
-// Report is used by the source to obtain the status of a sent message
-type Report struct {
-	ID         int64                  // Unique ID for the report, used to maintain sequence
-	Status     string                 // Result of the sending
-	StatusCode int                    // Result of the sending
-	Metadata   map[string]interface{} // Opaque
-
-	message *Message
 }

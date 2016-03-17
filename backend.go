@@ -1,7 +1,5 @@
 package rbforwarder
 
-import "sync"
-
 type backend struct {
 	source       Source
 	decoder      Decoder
