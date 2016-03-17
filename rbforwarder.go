@@ -49,6 +49,42 @@ type SenderConfig struct {
 	Config map[string]interface{} `yaml:"config"`
 }
 
+// Source is the component that gets data from a source, then sends the data
+// to the backend.
+type Source interface {
+	Listen(Forwarder)
+	Close()
+}
+
+// Decoder is the component that parses a raw buffer to a structure
+type Decoder interface {
+	Init(int) error
+	Decode(*Message) error
+}
+
+// Processor performs operations on a data structure
+type Processor interface {
+	Init(int) error
+	Process(message *Message) (bool, error)
+}
+
+// Encoder serializes a data structure to a output buffer
+type Encoder interface {
+	Init(int) error
+	Encode(*Message) error
+}
+
+// Sender takes a raw buffer and sent it using a network protocol
+type Sender interface {
+	Init(int) error
+	Send(*Message) error
+}
+
+// SenderHelper is used to create Senders instances
+type SenderHelper interface {
+	CreateSender() Sender
+}
+
 // Forwarder is the interface to implement by RBForwarder
 type Forwarder interface {
 	TakeMessage() (message *Message, err error)
