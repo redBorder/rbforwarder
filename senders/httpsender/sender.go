@@ -1,4 +1,4 @@
-package senders
+package httpsender
 
 import (
 	"bufio"
@@ -6,6 +6,7 @@ import (
 	"compress/zlib"
 	"crypto/tls"
 	"io"
+	"math/rand"
 	"net/http"
 	"sync"
 	"time"
@@ -20,12 +21,14 @@ const (
 	errHTTP    = 3
 )
 
-// HTTPSender receives data from pipe and send it via HTTP to an endpoint
-type HTTPSender struct {
+var logger *logrus.Entry
+
+// Sender receives data from pipe and send it via HTTP to an endpoint
+type Sender struct {
 	id          int
 	log         *logrus.Entry
 	client      *http.Client
-	batchBuffer map[string]*BatchBuffer
+	batchBuffer map[string]*batchBuffer
 
 	// Statistics
 	counter int64
@@ -33,11 +36,10 @@ type HTTPSender struct {
 
 	// Configuration
 	rawConfig map[string]interface{}
-	config    httpSenderConfig
+	config    config
 }
 
-// BatchBuffer stores multiple messages to send it in one HTTP Post body
-type BatchBuffer struct {
+type batchBuffer struct {
 	buff         *bytes.Buffer
 	writer       io.Writer
 	timer        *time.Timer
@@ -46,7 +48,7 @@ type BatchBuffer struct {
 	messages     []*rbforwarder.Message
 }
 
-type httpSenderConfig struct {
+type config struct {
 	URL          string
 	IgnoreCert   bool
 	Deflate      bool
@@ -56,31 +58,30 @@ type httpSenderConfig struct {
 }
 
 // Init initializes an HTTP sender
-func (s *HTTPSender) Init(id int) error {
-	log = rbforwarder.NewLogger("sender")
+func (s *Sender) Init(id int) error {
+	logger = rbforwarder.NewLogger("sender")
 
-	s.parseConfig()
 	s.id = id
 
 	// Create the client object. Useful for skipping SSL verify
 	tr := &http.Transport{}
 	if s.config.IgnoreCert {
-		log.Warn("Ignoring SSL certificates")
+		logger.Warn("Ignoring SSL certificates")
 		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	s.client = &http.Client{Transport: tr}
 
-	log.WithFields(s.rawConfig).Infof("HTTP Sender ready")
+	logger.WithField("worker", s.id).WithFields(s.rawConfig).Infof("[%d] HTTP Sender ready", s.id)
 
 	// A map to store buffers for each endpoint
-	s.batchBuffer = make(map[string]*BatchBuffer)
+	s.batchBuffer = make(map[string]*batchBuffer)
 
 	if s.config.ShowCounter > 0 {
 		go func() {
 			for {
 				timer := time.NewTimer(time.Duration(s.config.ShowCounter) * time.Second)
 				<-timer.C
-				log.Infof("[%d] Sender: Messages per second %d", s.id, s.counter/int64(s.config.ShowCounter))
+				logger.WithField("worker", s.id).Debugf("Messages per second %d", s.counter/int64(s.config.ShowCounter))
 				s.counter = 0
 			}
 		}()
@@ -91,7 +92,9 @@ func (s *HTTPSender) Init(id int) error {
 
 // Send stores a message received from the pipeline into a buffer to perform
 // batching.
-func (s *HTTPSender) Send(message *rbforwarder.Message) error {
+func (s *Sender) Send(message *rbforwarder.Message) error {
+
+	// logger.Printf("[%d] Sending message ID: [%d]", s.id, message)
 
 	// We can send batch only for messages with the same path
 	var path string
@@ -102,7 +105,7 @@ func (s *HTTPSender) Send(message *rbforwarder.Message) error {
 
 	// Initialize buffer for path
 	if _, exists := s.batchBuffer[path]; !exists {
-		s.batchBuffer[path] = &BatchBuffer{
+		s.batchBuffer[path] = &batchBuffer{
 			mutex:        &sync.Mutex{},
 			messageCount: 0,
 			buff:         new(bytes.Buffer),
@@ -140,7 +143,7 @@ func (s *HTTPSender) Send(message *rbforwarder.Message) error {
 	// Write the new message to the buffer and increase the number of messages in
 	// the buffer
 	if _, err := batchBuffer.writer.Write(message.OutputBuffer.Bytes()); err != nil {
-		return err
+		logger.Error(err)
 	}
 	batchBuffer.messages = append(batchBuffer.messages, message)
 	batchBuffer.messageCount++
@@ -161,7 +164,7 @@ func (s *HTTPSender) Send(message *rbforwarder.Message) error {
 	return nil
 }
 
-func (s *HTTPSender) batchSend(batchBuffer *BatchBuffer, path string) {
+func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 
 	// Reset buffer and clear message counter
 	defer func() {
@@ -191,7 +194,7 @@ func (s *HTTPSender) batchSend(batchBuffer *BatchBuffer, path string) {
 	// Create the HTTP POST request
 	req, err := http.NewRequest("POST", s.config.URL+"/"+path, batchBuffer.buff)
 	if err != nil {
-		log.Errorf("Error creating request: %s", err.Error())
+		logger.Errorf("Error creating request: %s", err.Error())
 		for _, message := range batchBuffer.messages {
 			message.Fail(errRequest, err.Error())
 		}
@@ -206,7 +209,7 @@ func (s *HTTPSender) batchSend(batchBuffer *BatchBuffer, path string) {
 	// Send the HTTP POST request
 	res, err := s.client.Do(req)
 	if err != nil {
-		log.Errorf("Error sending request: %s", err.Error())
+		logger.Errorf("Error sending request: %s", err.Error())
 		for _, message := range batchBuffer.messages {
 			message.Fail(errHTTP, err.Error())
 		}
@@ -217,44 +220,19 @@ func (s *HTTPSender) batchSend(batchBuffer *BatchBuffer, path string) {
 	// Send the reports
 	if res.StatusCode >= 400 {
 		for _, message := range batchBuffer.messages {
-			message.Fail(errStatus, res.Status)
+			if err := message.Fail(errStatus, res.Status); err != nil {
+				logger.Error(err)
+			}
 		}
 	} else {
 		for _, message := range batchBuffer.messages {
-			message.Ack(res.Status)
+			time.Sleep(time.Duration((rand.Int31n(1500))) * time.Millisecond)
+			if err := message.Ack(res.Status); err != nil {
+				logger.Error(err)
+			}
 		}
 	}
 
 	// Statistics
 	s.counter += batchBuffer.messageCount
-}
-
-// Parse the config from YAML file
-func (s *HTTPSender) parseConfig() {
-	if s.rawConfig["url"] != nil {
-		s.config.URL = s.rawConfig["url"].(string)
-	} else {
-		log.Fatal("No url provided")
-	}
-
-	if s.rawConfig["insecure"] != nil {
-		s.config.IgnoreCert = s.rawConfig["insecure"].(bool)
-	}
-	if s.rawConfig["batchsize"] != nil {
-		s.config.BatchSize = int64(s.rawConfig["batchsize"].(int))
-	} else {
-		s.config.BatchSize = 1
-	}
-
-	if s.rawConfig["batchtimeout"] != nil {
-		s.config.BatchTimeout = time.Duration(s.rawConfig["batchtimeout"].(int)) * time.Millisecond
-	}
-
-	if s.rawConfig["deflate"] != nil {
-		s.config.Deflate = s.rawConfig["deflate"].(bool)
-	}
-
-	if s.rawConfig["showcounter"] != nil {
-		s.config.ShowCounter = s.rawConfig["showcounter"].(int)
-	}
 }
