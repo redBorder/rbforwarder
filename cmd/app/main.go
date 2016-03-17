@@ -20,13 +20,23 @@ var (
 	debug         *bool
 	workersFlag   *int
 	queueSizeFlag *int
+	retriesFlag   *int
 )
+
+type config struct {
+	Source    map[string]interface{} `yaml:"source"`
+	Decoder   map[string]interface{} `yaml:"decoder"`
+	Processor map[string]interface{} `yaml:"processor"`
+	Encoder   map[string]interface{} `yaml:"encoder"`
+	Sender    map[string]interface{} `yaml:"sender"`
+}
 
 func init() {
 	configFile = flag.String("config", "", "Config file")
 	debug = flag.Bool("debug", false, "Show debug info")
 	workersFlag = flag.Int("workers", 1, "Number of workers")
 	queueSizeFlag = flag.Int("queue_size", 1000, "Max number of messages in queue")
+	retriesFlag = flag.Int("msg_retries", 0, "Max number of retries for a message")
 
 	flag.Parse()
 
@@ -50,7 +60,12 @@ func main() {
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 
-	forwarder := rbforwarder.NewRBForwarder(*workersFlag, *queueSizeFlag)
+	// Create forwarder
+	forwarder := rbforwarder.NewRBForwarder(rbforwarder.Config{
+		Workers:   *workersFlag,
+		Retries:   *retriesFlag,
+		QueueSize: *queueSizeFlag,
+	})
 
 	go func() {
 		<-c
@@ -60,7 +75,7 @@ func main() {
 	forwarder.Start()
 }
 
-func loadConfigFile(fileName string) (config map[string]interface{}, err error) {
+func loadConfigFile(fileName string) (config config, err error) {
 	configData, err := ioutil.ReadFile(fileName)
 	if err != nil {
 		return
