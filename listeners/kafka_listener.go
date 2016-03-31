@@ -18,10 +18,12 @@ type KafkaListener struct {
 	messagePool *util.MessagePool
 	topics      []string
 	maxRate     uint32
+	maxBytes    uint64
 	keepSending chan bool
 
 	counter         int64
 	currentMessages uint32
+	currentBytes    uint64
 
 	config *kafkaClient.ConsumerConfig
 }
@@ -67,11 +69,29 @@ func (l *KafkaListener) Listen(messagePool *util.MessagePool) chan *util.Message
 	return l.c
 }
 
-func (l *KafkaListener) GetStrategy() func(*kafkaClient.Worker, *kafkaClient.Message, kafkaClient.TaskId) kafkaClient.WorkerResult {
-	return func(_ *kafkaClient.Worker, msg *kafkaClient.Message, id kafkaClient.TaskId) kafkaClient.WorkerResult {
-		if l.maxRate > 0 && l.currentMessages >= l.maxRate {
+func (l *KafkaListener) GetStrategy() func(
+	*kafkaClient.Worker,
+	*kafkaClient.Message,
+	kafkaClient.TaskId,
+) kafkaClient.WorkerResult {
+
+	return func(_ *kafkaClient.Worker,
+		msg *kafkaClient.Message,
+		id kafkaClient.TaskId,
+	) kafkaClient.WorkerResult {
+
+		if l.maxRate > 0 &&
+			l.currentMessages >= l.maxRate {
+
+			// Wait for message counter to reset
 			<-l.keepSending
 			l.currentMessages = 0
+		} else if l.maxBytes > 0 &&
+			l.currentBytes >= l.maxBytes {
+
+			// Wait for bytes counter to reset
+			<-l.keepSending
+			l.currentBytes = 0
 		}
 
 		log.Debugf("%s: %s", msg.Topic, msg.Value)
@@ -81,6 +101,7 @@ func (l *KafkaListener) GetStrategy() func(*kafkaClient.Worker, *kafkaClient.Mes
 		l.counter++
 		l.c <- message
 		l.currentMessages++
+		l.currentBytes += uint64(len(msg.Value))
 		return kafkaClient.NewSuccessfulResult(id)
 	}
 }
@@ -172,6 +193,11 @@ func (l *KafkaListener) parseConfig() {
 	if l.rawConfig["maxrate"] != nil {
 		l.maxRate = uint32(l.rawConfig["maxrate"].(int))
 	}
+
+	if l.rawConfig["maxbytes"] != nil {
+		l.maxBytes = uint64(l.rawConfig["maxbytes"].(int))
+	}
+
 	if l.rawConfig["consumerid"] != nil {
 		l.config.Groupid = l.rawConfig["consumerid"].(string)
 	} else {
