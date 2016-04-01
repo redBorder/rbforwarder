@@ -44,8 +44,11 @@ test:
 	@printf "$(MKL_GREEN)Test passed$(MKL_CLR_RESET)\n"
 
 coverage:
-	overalls -covermode=set -project=github.com/Bigomby/go-pipes
-	goveralls -coverprofile=overalls.coverprofile -service=travis-ci
+	@printf "$(MKL_YELLOW)Computing coverage$(MKL_CLR_RESET)\n"
+	@overalls -covermode=set -project=github.com/redBorder/rbforwarder
+	@go tool cover -func overalls.coverprofile
+	@goveralls -coverprofile=overalls.coverprofile -service=travis-ci
+	@rm -f overalls.coverprofile
 
 get_dev:
 	@printf "$(MKL_YELLOW)Installing deps$(MKL_CLR_RESET)\n"
