@@ -25,7 +25,6 @@ var logger *logrus.Entry
 // Sender receives data from pipe and send it via HTTP to an endpoint
 type Sender struct {
 	id          int
-	log         *logrus.Entry
 	client      *http.Client
 	batchBuffer map[string]*batchBuffer
 
@@ -34,8 +33,7 @@ type Sender struct {
 	timer   *time.Timer
 
 	// Configuration
-	rawConfig map[string]interface{}
-	config    config
+	config config
 }
 
 type batchBuffer struct {
@@ -70,11 +68,10 @@ func (s *Sender) Init(id int) error {
 	}
 	s.client = &http.Client{Transport: tr}
 
-	logger.WithField("worker", s.id).WithFields(s.rawConfig).Infof("HTTP Sender ready")
-
 	// A map to store buffers for each endpoint
 	s.batchBuffer = make(map[string]*batchBuffer)
 
+	// Show the messages per second every "showCounter" seconds
 	if s.config.ShowCounter > 0 {
 		go func() {
 			for {
