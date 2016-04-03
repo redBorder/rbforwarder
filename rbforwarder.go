@@ -165,6 +165,8 @@ func (f *RBForwarder) GetReports() <-chan Report {
 					if f.backend.retries < 0 || message.report.Retries < f.backend.retries {
 						// Retry this message
 						message.report.Retries++
+						logger.Warnf("Retrying message: %d | Reason: %s",
+							message.report.ID, message.report.Status)
 						if err := message.Produce(); err != nil {
 							logger.Error(err)
 						}
