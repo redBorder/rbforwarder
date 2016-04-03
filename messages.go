@@ -34,6 +34,10 @@ type Message struct {
 // Produce is used by the source to send messages to the backend
 func (m *Message) Produce() error {
 
+	if m.backend.closed {
+		return errors.New("Backend closed")
+	}
+
 	// This is no a retry
 	if m.report.Retries == 0 {
 		m.report = Report{

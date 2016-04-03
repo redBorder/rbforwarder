@@ -64,6 +64,7 @@ type backend struct {
 
 	workers int
 	retries int
+	closed  bool
 }
 
 // Worker that decodes the received message
