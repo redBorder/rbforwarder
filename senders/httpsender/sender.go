@@ -192,7 +192,9 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	if err != nil {
 		logger.Errorf("Error creating request: %s", err.Error())
 		for _, message := range batchBuffer.messages {
-			message.Report(errRequest, err.Error())
+			if err := message.Report(errRequest, err.Error()); err != nil {
+				logger.Error(err)
+			}
 		}
 		return
 	}
@@ -206,7 +208,9 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	res, err := s.client.Do(req)
 	if err != nil {
 		for _, message := range batchBuffer.messages {
-			message.Report(errHTTP, err.Error())
+			if err := message.Report(errHTTP, err.Error()); err != nil {
+				logger.Error(err)
+			}
 		}
 		return
 	}
