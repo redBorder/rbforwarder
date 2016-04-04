@@ -145,7 +145,6 @@ func (f *RBForwarder) GetReports() <-chan Report {
 					// Send back the message to the pool
 					select {
 					case f.backend.messagePool <- message:
-						f.backend.currentProcessedID++
 					case <-time.After(1 * time.Second):
 						logger.Error("Can't put back the message on the pool")
 					}

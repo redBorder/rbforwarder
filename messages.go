@@ -13,7 +13,7 @@ const (
 
 // Report is used by the source to obtain the status of a sent message
 type Report struct {
-	ID         int64  // Unique ID for the report, used to maintain sequence
+	ID         uint64 // Unique ID for the report, used to maintain sequence
 	Status     string // Result of the sending
 	StatusCode int    // Result of the sending
 	Retries    int
@@ -41,7 +41,7 @@ func (m *Message) Produce() error {
 	// This is no a retry
 	if m.report.Retries == 0 {
 		m.report = Report{
-			ID:       atomic.AddInt64(&m.backend.currentProducedID, 1) - 1,
+			ID:       atomic.AddUint64(&m.backend.currentProducedID, 1) - 1,
 			Metadata: m.Metadata,
 		}
 	}
