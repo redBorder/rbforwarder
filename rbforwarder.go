@@ -44,6 +44,7 @@ func NewRBForwarder(config Config) *RBForwarder {
 			workers: config.Workers,
 			retries: config.Retries,
 		},
+		reports: make(chan Report, config.QueueSize),
 	}
 
 	forwarder.close = make(chan struct{})
@@ -124,7 +125,6 @@ func (f *RBForwarder) TakeMessage() (message *Message, err error) {
 // GetReports is used by the source to get a report for a sent message.
 // Reports are delivered on the same order that was sent
 func (f *RBForwarder) GetReports() <-chan Report {
-	f.reports = make(chan Report)
 
 	go func() {
 
