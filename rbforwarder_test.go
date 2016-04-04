@@ -1,7 +1,9 @@
 package rbforwarder
 
 import (
+	"math/rand"
 	"testing"
+	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
@@ -10,17 +12,19 @@ type TestSource struct{}
 type TestSender struct{}
 type TestSenderHelper struct{}
 
-var sourceChannel = make(chan string)
-var senderChannel = make(chan string)
-var reportChannel = make(chan Report)
-var closeChannel = make(chan string)
+var sourceChannel chan string
+var senderChannel chan string
+var reportChannel chan Report
+var closeChannel chan string
 
 func (tsource *TestSource) Listen(f Forwarder) {
 	go func() {
 		for msg := range sourceChannel {
 			message, _ := f.TakeMessage()
 			message.InputBuffer.WriteString(msg)
-			message.Produce()
+			if err := message.Produce(); err != nil {
+				return
+			}
 		}
 	}()
 
@@ -40,8 +44,10 @@ func (tsender *TestSender) Init(id int) error {
 }
 
 func (tsender *TestSender) Send(m *Message) error {
-	senderChannel <- string(m.OutputBuffer.Bytes())
+	// TODO Mock time
+	time.Sleep((time.Millisecond * 10) * time.Duration(rand.Int31n(50)))
 	m.Report(0, "OK")
+	senderChannel <- string(m.OutputBuffer.Bytes())
 	return nil
 }
 
@@ -52,8 +58,8 @@ func (tsh *TestSenderHelper) CreateSender() Sender {
 func TestBackend(t *testing.T) {
 	Convey("Given a working backend", t, func() {
 		config := Config{
-			Retries:   1,
-			Workers:   1,
+			Retries:   0,
+			Workers:   10,
 			QueueSize: 100,
 		}
 		source := new(TestSource)
@@ -63,7 +69,13 @@ func TestBackend(t *testing.T) {
 		rbforwarder.SetSource(source)
 		rbforwarder.SetSenderHelper(senderHelper)
 
+		sourceChannel = make(chan string, 10)
+		senderChannel = make(chan string, 10)
+		reportChannel = make(chan Report, 10)
+		closeChannel = make(chan string, 10)
+
 		go rbforwarder.Start()
+		time.Sleep(1000 * time.Millisecond)
 
 		Convey("When a \"Hello World\" message is received", func() {
 			sourceChannel <- "Hola mundo"
@@ -77,15 +89,41 @@ func TestBackend(t *testing.T) {
 				report := <-reportChannel
 				So(report.StatusCode, ShouldEqual, 0)
 				So(report.Status, ShouldEqual, "OK")
+				So(report.ID, ShouldEqual, 0)
 			})
 		})
 
-		Convey("When closing the rbforwarder", func() {
-			rbforwarder.Close()
+		Convey("When multiple messages are received", func() {
+			sourceChannel <- "Message 1"
+			sourceChannel <- "Message 2"
+			sourceChannel <- "Message 3"
+			sourceChannel <- "Message 4"
+			sourceChannel <- "Message 5"
+			sourceChannel <- "Message 6"
 
-			Convey("The rfborwarder should exit", func() {
-				So(<-closeChannel, ShouldEqual, "finish")
+			<-senderChannel
+			<-senderChannel
+			<-senderChannel
+			<-senderChannel
+			<-senderChannel
+			<-senderChannel
+
+			Convey("Reports should be delivered ordered", func() {
+				report1 := <-reportChannel
+				report2 := <-reportChannel
+				report3 := <-reportChannel
+				report4 := <-reportChannel
+				report5 := <-reportChannel
+				report6 := <-reportChannel
+				So(report1.ID, ShouldEqual, 0)
+				So(report2.ID, ShouldEqual, 1)
+				So(report3.ID, ShouldEqual, 2)
+				So(report4.ID, ShouldEqual, 3)
+				So(report5.ID, ShouldEqual, 4)
+				So(report6.ID, ShouldEqual, 5)
 			})
 		})
+
+		time.Sleep(500 * time.Millisecond)
 	})
 }
