@@ -129,14 +129,46 @@ func (f *RBForwarder) GetReports() <-chan Report {
 	go func() {
 
 		// Get reports from the channel
-		for message := range f.backend.reports {
+		for message := range GetOrderedMessages(f.backend.reports) {
 
-			if message.report.ID == f.backend.currentProcessedID {
+			if message.report.StatusCode == 0 {
 
-				// Only takes the expected report ID
-				if message.report.StatusCode == 0 {
+				// Success
+				message.InputBuffer.Reset()
+				message.OutputBuffer.Reset()
+				message.Data = nil
+				message.Metadata = make(map[string]interface{})
 
-					// Success
+				// Send back the message to the pool
+				select {
+				case f.backend.messagePool <- message:
+				case <-time.After(1 * time.Second):
+					logger.Error("Can't put back the message on the pool")
+				}
+
+				// Send to the source a copy of the report
+				report := message.report
+				message.report = Report{}
+
+				select {
+				case f.reports <- report:
+				case <-time.After(1 * time.Second):
+					logger.Error("Error on report: Full queue")
+				}
+			} else {
+
+				// Fail
+				if f.backend.retries < 0 || message.report.Retries < f.backend.retries {
+					// Retry this message
+					message.report.Retries++
+					logger.Warnf("Retrying message: %d | Reason: %s",
+						message.report.ID, message.report.Status)
+					if err := message.Produce(); err != nil {
+						logger.Error(err)
+					}
+				} else {
+
+					// Give up
 					message.InputBuffer.Reset()
 					message.OutputBuffer.Reset()
 					message.Data = nil
@@ -158,52 +190,6 @@ func (f *RBForwarder) GetReports() <-chan Report {
 					case <-time.After(1 * time.Second):
 						logger.Error("Error on report: Full queue")
 					}
-				} else {
-
-					// Fail
-					if f.backend.retries < 0 || message.report.Retries < f.backend.retries {
-						// Retry this message
-						message.report.Retries++
-						logger.Warnf("Retrying message: %d | Reason: %s",
-							message.report.ID, message.report.Status)
-						if err := message.Produce(); err != nil {
-							logger.Error(err)
-						}
-					} else {
-
-						// Give up
-						message.InputBuffer.Reset()
-						message.OutputBuffer.Reset()
-						message.Data = nil
-						message.Metadata = make(map[string]interface{})
-
-						// Send back the message to the pool
-						select {
-						case f.backend.messagePool <- message:
-							f.backend.currentProcessedID++
-						case <-time.After(1 * time.Second):
-							logger.Error("Can't put back the message on the pool")
-						}
-
-						// Send to the source a copy of the report
-						report := message.report
-						message.report = Report{}
-
-						select {
-						case f.reports <- report:
-						case <-time.After(1 * time.Second):
-							logger.Error("Error on report: Full queue")
-						}
-					}
-				}
-
-			} else {
-
-				// Requeue the report if is not the expected ID
-				select {
-				case f.backend.reports <- message:
-				case <-time.After(1 * time.Second):
-					logger.Error("Error on report: Full queue")
 				}
 			}
 		}
