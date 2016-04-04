@@ -115,6 +115,7 @@ func (f *RBForwarder) TakeMessage() (message *Message, err error) {
 		// case <-time.After(1 * time.Second):
 		default:
 			logger.Warn("Error taking message from pool")
+			time.Sleep(500 * time.Millisecond)
 		}
 	}
 
