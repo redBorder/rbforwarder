@@ -55,8 +55,8 @@ type backend struct {
 	encoderPool   chan chan *Message
 	senderPool    chan chan *Message
 
-	currentProducedID  int64
-	currentProcessedID int64
+	currentProducedID  uint64
+	currentProcessedID uint64
 
 	messages    chan *Message
 	reports     chan *Message
