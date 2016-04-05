@@ -124,16 +124,15 @@ func (f *RBForwarder) SetSenderHelper(SenderHelper SenderHelper) {
 
 // TakeMessage returns a message from the message pool
 func (f *RBForwarder) TakeMessage() (message *Message, err error) {
-	select {
-	case message = <-f.backend.messagePool:
-		return
-	// case <-time.After(1 * time.Second):
-	default:
-		logger.Warn("Error taking message from pool")
-		time.Sleep(500 * time.Millisecond)
+	for {
+		select {
+		case message = <-f.backend.messagePool:
+			return
+		default:
+			logger.Warn("Error taking message from pool")
+			time.Sleep(500 * time.Millisecond)
+		}
 	}
-
-	return
 }
 
 // GetReports is used by the source to get a report for a sent message.
