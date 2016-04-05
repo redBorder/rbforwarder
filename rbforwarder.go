@@ -31,7 +31,7 @@ type RBForwarder struct {
 
 // NewRBForwarder creates a new Forwarder object
 func NewRBForwarder(config Config) *RBForwarder {
-	logger = NewLogger("forwarder")
+	logger = NewLogger("backend")
 
 	forwarder := &RBForwarder{
 		backend: &backend{
