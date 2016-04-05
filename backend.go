@@ -55,15 +55,11 @@ type backend struct {
 	encoderPool   chan chan *Message
 	senderPool    chan chan *Message
 
-	currentProducedID  uint64
-	currentProcessedID uint64
+	currentProducedID uint64
 
 	messages    chan *Message
 	reports     chan *Message
 	messagePool chan *Message
-
-	workers int
-	retries int
 }
 
 // Worker that decodes the received message

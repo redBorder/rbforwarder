@@ -43,9 +43,6 @@ func NewRBForwarder(config Config) *RBForwarder {
 			messages:    make(chan *Message, config.QueueSize),
 			reports:     make(chan *Message, config.QueueSize),
 			messagePool: make(chan *Message, config.QueueSize),
-
-			workers: config.Workers,
-			retries: config.Retries,
 		},
 		config:  config,
 		reports: make(chan Report, config.QueueSize),
@@ -82,7 +79,7 @@ func (f *RBForwarder) Start() {
 	f.backend.source.Listen(f)
 	logger.Info("Source ready")
 
-	for i := 0; i < f.backend.workers; i++ {
+	for i := 0; i < f.config.Workers; i++ {
 		f.backend.startDecoder(i)
 		f.backend.startProcessor(i)
 		f.backend.startEncoder(i)
@@ -177,7 +174,7 @@ func (f *RBForwarder) GetReports() <-chan Report {
 			} else {
 
 				// Fail
-				if f.backend.retries < 0 || message.report.Retries < f.backend.retries {
+				if f.config.Retries < 0 || message.report.Retries < f.config.Retries {
 					// Retry this message
 					message.report.Retries++
 					logger.Warnf("Retrying message: %d | Reason: %s",
