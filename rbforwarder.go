@@ -2,7 +2,6 @@ package rbforwarder
 
 import (
 	"bytes"
-	"errors"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -87,7 +86,6 @@ func (f *RBForwarder) Start() {
 
 	<-f.close
 
-	f.backend.closed = true
 	f.backend.source.Close()
 }
 
@@ -108,18 +106,15 @@ func (f *RBForwarder) SetSenderHelper(SenderHelper SenderHelper) {
 
 // TakeMessage returns a message from the message pool
 func (f *RBForwarder) TakeMessage() (message *Message, err error) {
-	for !f.backend.closed {
-		select {
-		case message = <-f.backend.messagePool:
-			return
-		// case <-time.After(1 * time.Second):
-		default:
-			logger.Warn("Error taking message from pool")
-			time.Sleep(500 * time.Millisecond)
-		}
+	select {
+	case message = <-f.backend.messagePool:
+		return
+	// case <-time.After(1 * time.Second):
+	default:
+		logger.Warn("Error taking message from pool")
+		time.Sleep(500 * time.Millisecond)
 	}
 
-	err = errors.New("Backend closed")
 	return
 }
 
