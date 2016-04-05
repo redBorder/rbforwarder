@@ -9,6 +9,14 @@ import (
 
 var logger *logrus.Entry
 
+// Config stores the configuration for a forwarder
+type Config struct {
+	Retries     int
+	Workers     int
+	QueueSize   int
+	ShowCounter int
+}
+
 // RBForwarder is the main objecto of the package. It has the main methods for
 // send messages and get reports. It has a backend for routing messages between
 // workers
@@ -16,13 +24,9 @@ type RBForwarder struct {
 	backend *backend
 	reports chan Report
 	close   chan struct{}
-}
+	counter uint64
 
-// Config stores the configuration for a forwarder
-type Config struct {
-	Retries   int
-	Workers   int
-	QueueSize int
+	config Config
 }
 
 // NewRBForwarder creates a new Forwarder object
@@ -43,6 +47,7 @@ func NewRBForwarder(config Config) *RBForwarder {
 			workers: config.Workers,
 			retries: config.Retries,
 		},
+		config:  config,
 		reports: make(chan Report, config.QueueSize),
 	}
 
@@ -82,6 +87,22 @@ func (f *RBForwarder) Start() {
 		f.backend.startProcessor(i)
 		f.backend.startEncoder(i)
 		f.backend.startSender(i)
+	}
+
+	if f.config.ShowCounter > 0 {
+		go func() {
+			for {
+				timer := time.NewTimer(
+					time.Duration(f.config.ShowCounter) * time.Second,
+				)
+				<-timer.C
+				logger.Infof(
+					"Messages per second %d",
+					f.counter/uint64(f.config.ShowCounter),
+				)
+				f.counter = 0
+			}
+		}()
 	}
 
 	<-f.close
@@ -130,6 +151,8 @@ func (f *RBForwarder) GetReports() <-chan Report {
 			if message.report.StatusCode == 0 {
 
 				// Success
+				f.counter++
+
 				message.InputBuffer.Reset()
 				message.OutputBuffer.Reset()
 				message.Data = nil
