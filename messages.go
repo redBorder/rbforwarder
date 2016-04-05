@@ -52,7 +52,7 @@ func GetOrderedMessages(in chan *Message) (out chan *Message) {
 			// Check if there are stored messages and send them.
 			for waiting[currentMessage] != nil {
 				out <- waiting[currentMessage]
-				waiting[currentMessage] = nil
+				delete(waiting, currentMessage)
 				currentMessage++
 			}
 		}
