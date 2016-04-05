@@ -128,9 +128,8 @@ func (f *RBForwarder) TakeMessage() (message *Message, err error) {
 		select {
 		case message = <-f.backend.messagePool:
 			return
-		default:
+		case <-time.After(500 * time.Millisecond):
 			logger.Warn("Error taking message from pool")
-			time.Sleep(500 * time.Millisecond)
 		}
 	}
 }
