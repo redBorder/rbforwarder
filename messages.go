@@ -3,7 +3,6 @@ package rbforwarder
 import (
 	"bytes"
 	"errors"
-	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -37,17 +36,14 @@ type Message struct {
 func GetOrderedMessages(in chan *Message) (out chan *Message) {
 	var currentMessage uint64
 	waiting := make(map[uint64]*Message)
-	mutex := new(sync.Mutex)
 	out = make(chan *Message)
 
 	go func() {
 		for message := range in {
 			if message.report.ID == currentMessage {
 				// The message is the expected. Send it.
-				mutex.Lock()
 				out <- message
 				currentMessage++
-				mutex.Unlock()
 			} else {
 				// This message is not the expected. Store it.
 				waiting[message.report.ID] = message
@@ -55,11 +51,9 @@ func GetOrderedMessages(in chan *Message) (out chan *Message) {
 
 			// Check if there are stored messages and send them.
 			for waiting[currentMessage] != nil {
-				mutex.Lock()
 				out <- waiting[currentMessage]
 				waiting[currentMessage] = nil
 				currentMessage++
-				mutex.Unlock()
 			}
 		}
 	}()
