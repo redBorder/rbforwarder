@@ -68,11 +68,6 @@ func NewRBForwarder(config Config) *RBForwarder {
 // Start spawning workers
 func (f *RBForwarder) Start() {
 
-	// Start listening
-	if f.backend.source == nil {
-		logger.Fatal("No source defined")
-	}
-
 	// Start the backend
 	f.backend.Init(f.config.Workers)
 	logger.Info("Backend ready")
@@ -80,10 +75,6 @@ func (f *RBForwarder) Start() {
 	// Start the report handler
 	f.reportHandler.Init()
 	logger.Info("Reporter ready")
-
-	// Start the listener
-	f.backend.source.Listen(f)
-	logger.Info("Source ready")
 
 	if f.config.ShowCounter > 0 {
 		go func() {
@@ -114,16 +105,6 @@ func (f *RBForwarder) Start() {
 			f.backend.messagePool <- message
 		}
 	}()
-}
-
-// Close stops the workers
-func (f *RBForwarder) Close() {
-	f.backend.source.Close()
-}
-
-// SetSource set a source on the backend
-func (f *RBForwarder) SetSource(source Source) {
-	f.backend.source = source
 }
 
 // SetSenderHelper set a sender on the backend

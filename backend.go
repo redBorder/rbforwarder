@@ -1,12 +1,5 @@
 package rbforwarder
 
-// Source is the component that gets data from a source, then sends the data
-// to the backend.
-type Source interface {
-	Listen(*RBForwarder)
-	Close()
-}
-
 // Decoder is the component that parses a raw buffer to a structure
 type Decoder interface {
 	Init(int) error
@@ -37,7 +30,6 @@ type SenderHelper interface {
 }
 
 type backend struct {
-	source       Source
 	decoder      Decoder
 	processor    Processor
 	encoder      Encoder
