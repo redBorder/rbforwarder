@@ -20,13 +20,7 @@ in reporting system, so you can know if the messages has been delivered.
 
 == Components
 
-*Sources*
-
-* HTTP
-* Kafka
-* MQTT
-
-*Outputs*
+*Senders*
 
 * MQTT
 * HTTP
@@ -86,33 +80,3 @@ in reporting system, so you can know if the messages has been delivered.
 | _Pending_
 
 |===
-
-== Example config file
-
-This is an example config file for a MQTT to HTTP with json decoding/encoding:
-
-[source,yaml]
-----
-backend:
-  workers: 10
-  queue: 10000
-  retries: 3
-source:
-  type: "kafka"
-  broker: "localhost:2181"
-  topics:
-    - "topic"
-decoder:
-  type: "json"
-processor:
-  type: "template"
-  template: templates/template.json
-encoder:
-  type: "json"
-sender:
-  type: "http"
-  url: "http://localhost:8080"
-  batchsize: 100
-  batchtimeout: 500
-  deflate: true
-----
