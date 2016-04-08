@@ -62,6 +62,28 @@ type backend struct {
 	messagePool chan *Message
 }
 
+func newBackend(workers, queueSize int) *backend {
+	return &backend{
+		decoderPool:   make(chan chan *Message, workers),
+		processorPool: make(chan chan *Message, workers),
+		encoderPool:   make(chan chan *Message, workers),
+		senderPool:    make(chan chan *Message, workers),
+
+		messages:    make(chan *Message, queueSize),
+		reports:     make(chan *Message, queueSize),
+		messagePool: make(chan *Message, queueSize),
+	}
+}
+
+func (b *backend) Init(workers int) {
+	for i := 0; i < workers; i++ {
+		b.startDecoder(i)
+		b.startProcessor(i)
+		b.startEncoder(i)
+		b.startSender(i)
+	}
+}
+
 // Worker that decodes the received message
 func (b *backend) startDecoder(i int) {
 	if b.decoder != nil {

@@ -21,10 +21,11 @@ type Config struct {
 // send messages and get reports. It has a backend for routing messages between
 // workers
 type RBForwarder struct {
-	backend *backend
-	reports chan Report
-	close   chan struct{}
-	counter uint64
+	backend       *backend
+	reportHandler *reportHandler
+	reports       chan Report
+	close         chan struct{}
+	counter       uint64
 
 	config Config
 }
@@ -34,18 +35,10 @@ func NewRBForwarder(config Config) *RBForwarder {
 	logger = NewLogger("backend")
 
 	forwarder := &RBForwarder{
-		backend: &backend{
-			decoderPool:   make(chan chan *Message, config.Workers),
-			processorPool: make(chan chan *Message, config.Workers),
-			encoderPool:   make(chan chan *Message, config.Workers),
-			senderPool:    make(chan chan *Message, config.Workers),
-
-			messages:    make(chan *Message, config.QueueSize),
-			reports:     make(chan *Message, config.QueueSize),
-			messagePool: make(chan *Message, config.QueueSize),
-		},
-		config:  config,
-		reports: make(chan Report, config.QueueSize),
+		backend:       newBackend(config.Workers, config.QueueSize),
+		reportHandler: newReportHandler(config.Retries),
+		reports:       make(chan Report, config.QueueSize),
+		config:        config,
 	}
 
 	forwarder.close = make(chan struct{})
@@ -70,21 +63,25 @@ func NewRBForwarder(config Config) *RBForwarder {
 	return forwarder
 }
 
-// Start spawn the workers
+// Start spawning workers
 func (f *RBForwarder) Start() {
+
 	// Start listening
 	if f.backend.source == nil {
 		logger.Fatal("No source defined")
 	}
+
+	// Start the backend
+	f.backend.Init(f.config.Workers)
+	logger.Info("Backend ready")
+
+	// Start the report handler
+	f.reportHandler.Init()
+	logger.Info("Reporter ready")
+
+	// Start the listener
 	f.backend.source.Listen(f)
 	logger.Info("Source ready")
-
-	for i := 0; i < f.config.Workers; i++ {
-		f.backend.startDecoder(i)
-		f.backend.startProcessor(i)
-		f.backend.startEncoder(i)
-		f.backend.startSender(i)
-	}
 
 	if f.config.ShowCounter > 0 {
 		go func() {
@@ -102,9 +99,28 @@ func (f *RBForwarder) Start() {
 		}()
 	}
 
-	<-f.close
+	// Get reports from the backend and send them to the reportHandler
+	go func() {
+		for message := range f.backend.reports {
+			f.reportHandler.in <- message
+		}
+	}()
 
+	// Listen for reutilizable messages and send them back to the pool
+	go func() {
+		for message := range f.reportHandler.freedMessages {
+			f.backend.messagePool <- message
+		}
+	}()
+
+	<-f.close
 	f.backend.source.Close()
+}
+
+// GetReports is used by the source to get a report for a sent message.
+// Reports are delivered on the same order that was sent
+func (f *RBForwarder) GetReports() <-chan Report {
+	return f.reportHandler.GetOrderedReports()
 }
 
 // Close stops the workers
@@ -132,82 +148,4 @@ func (f *RBForwarder) TakeMessage() (message *Message, err error) {
 			logger.Warn("Error taking message from pool")
 		}
 	}
-}
-
-// GetReports is used by the source to get a report for a sent message.
-// Reports are delivered on the same order that was sent
-func (f *RBForwarder) GetReports() <-chan Report {
-
-	go func() {
-
-		// Get reports from the channel
-		for message := range GetOrderedMessages(f.backend.reports) {
-
-			if message.report.StatusCode == 0 {
-
-				// Success
-				f.counter++
-
-				message.InputBuffer.Reset()
-				message.OutputBuffer.Reset()
-				message.Data = nil
-				message.Metadata = make(map[string]interface{})
-
-				// Send back the message to the pool
-				select {
-				case f.backend.messagePool <- message:
-				case <-time.After(1 * time.Second):
-					logger.Error("Can't put back the message on the pool")
-				}
-
-				// Send to the source a copy of the report
-				report := message.report
-				message.report = Report{}
-
-				select {
-				case f.reports <- report:
-				case <-time.After(1 * time.Second):
-					logger.Error("Error on report: Full queue")
-				}
-			} else {
-
-				// Fail
-				if f.config.Retries < 0 || message.report.Retries < f.config.Retries {
-					// Retry this message
-					message.report.Retries++
-					logger.Warnf("Retrying message: %d | Reason: %s",
-						message.report.ID, message.report.Status)
-					if err := message.Produce(); err != nil {
-						logger.Error(err)
-					}
-				} else {
-
-					// Give up
-					message.InputBuffer.Reset()
-					message.OutputBuffer.Reset()
-					message.Data = nil
-					message.Metadata = make(map[string]interface{})
-
-					// Send back the message to the pool
-					select {
-					case f.backend.messagePool <- message:
-					case <-time.After(1 * time.Second):
-						logger.Error("Can't put back the message on the pool")
-					}
-
-					// Send to the source a copy of the report
-					report := message.report
-					message.report = Report{}
-
-					select {
-					case f.reports <- report:
-					case <-time.After(1 * time.Second):
-						logger.Error("Error on report: Full queue")
-					}
-				}
-			}
-		}
-	}()
-
-	return f.reports
 }

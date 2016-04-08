@@ -31,36 +31,6 @@ type Message struct {
 	backend *backend // Use to send the message to the backend
 }
 
-// GetOrderedMessages takes a channel of unordered reports and returns a channel
-// with the reports ordered
-func GetOrderedMessages(in chan *Message) (out chan *Message) {
-	var currentMessage uint64
-	waiting := make(map[uint64]*Message)
-	out = make(chan *Message)
-
-	go func() {
-		for message := range in {
-			if message.report.ID == currentMessage {
-				// The message is the expected. Send it.
-				out <- message
-				currentMessage++
-			} else {
-				// This message is not the expected. Store it.
-				waiting[message.report.ID] = message
-			}
-
-			// Check if there are stored messages and send them.
-			for waiting[currentMessage] != nil {
-				out <- waiting[currentMessage]
-				delete(waiting, currentMessage)
-				currentMessage++
-			}
-		}
-	}()
-
-	return out
-}
-
 // Produce is used by the source to send messages to the backend
 func (m *Message) Produce() error {
 
