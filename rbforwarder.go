@@ -29,7 +29,6 @@ type RBForwarder struct {
 	backend       *backend
 	reportHandler *reportHandler
 	reports       chan Report
-	close         chan struct{}
 	counter       uint64
 
 	config Config
@@ -45,8 +44,6 @@ func NewRBForwarder(config Config) *RBForwarder {
 		reports:       make(chan Report, config.QueueSize),
 		config:        config,
 	}
-
-	forwarder.close = make(chan struct{})
 
 	for i := 0; i < config.QueueSize; i++ {
 		forwarder.backend.messagePool <- &Message{
@@ -117,14 +114,11 @@ func (f *RBForwarder) Start() {
 			f.backend.messagePool <- message
 		}
 	}()
-
-	<-f.close
-	f.backend.source.Close()
 }
 
 // Close stops the workers
 func (f *RBForwarder) Close() {
-	f.close <- struct{}{}
+	f.backend.source.Close()
 }
 
 // SetSource set a source on the backend
