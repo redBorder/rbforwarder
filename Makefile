@@ -10,7 +10,7 @@ bindir?=	$(prefix)/bin
 
 build:
 	@printf "$(MKL_YELLOW)Building $(BIN)$(MKL_CLR_RESET)\n"
-	go build -o $(BIN) ./cmd/app/
+	go build
 
 shared_lib:
 	@printf "$(MKL_YELLOW)Building shared library$(MKL_CLR_RESET)\n"
