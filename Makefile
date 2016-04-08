@@ -4,28 +4,13 @@ MKL_YELLOW?=	\033[033m
 MKL_BLUE?=	\033[034m
 MKL_CLR_RESET?=	\033[0m
 
-BIN=      rb_forwarder
-prefix?=  /usr/local
-bindir?=	$(prefix)/bin
+install:
+	@printf "$(MKL_YELLOW)Installing package$(MKL_CLR_RESET)\n"
+	go install
 
-build:
-	@printf "$(MKL_YELLOW)Building $(BIN)$(MKL_CLR_RESET)\n"
-	go build
-
-shared_lib:
+lib:
 	@printf "$(MKL_YELLOW)Building shared library$(MKL_CLR_RESET)\n"
 	go build -buildmode=c-archive -o rbforwarder.a librbforwarder.go
-
-install:
-	@printf "$(MKL_YELLOW)Install $(BIN) to $(bindir)$(MKL_CLR_RESET)\n"
-	install $(BIN) $(bindir)
-
-uninstall:
-	@printf "$(MKL_RED)Uninstall $(BIN) from $(bindir)$(MKL_CLR_RESET)\n"
-	rm -f $(prefix)/$(BIN)
-
-check: fmt errcheck vet
-	@printf "$(MKL_GREEN)No errors found$(MKL_CLR_RESET)\n"
 
 fmt:
 	@if [ -n "$$(go fmt ./...)" ]; then echo 'Please run go fmt on your code.' && exit 1; fi
