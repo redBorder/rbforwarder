@@ -53,7 +53,6 @@ coverage:
 get_dev:
 	@printf "$(MKL_YELLOW)Installing deps$(MKL_CLR_RESET)\n"
 	go get golang.org/x/tools/cmd/cover
-	go get golang.org/x/tools/cmd/vet
 	go get github.com/kisielk/errcheck
 	go get github.com/stretchr/testify/assert
 	go get github.com/mattn/goveralls
