@@ -74,8 +74,7 @@ func TestBackend(t *testing.T) {
 		reportChannel = make(chan Report, 10)
 		closeChannel = make(chan string, 10)
 
-		go rbforwarder.Start()
-		time.Sleep(1000 * time.Millisecond)
+		rbforwarder.Start()
 
 		Convey("When a \"Hello World\" message is received", func() {
 			sourceChannel <- "Hola mundo"
@@ -123,7 +122,5 @@ func TestBackend(t *testing.T) {
 				So(report6.ID, ShouldEqual, 5)
 			})
 		})
-
-		time.Sleep(500 * time.Millisecond)
 	})
 }
