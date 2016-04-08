@@ -7,7 +7,12 @@ import (
 	"github.com/Sirupsen/logrus"
 )
 
+// Logger for the package
 var logger *logrus.Entry
+
+//------------------------------------------------------------------------------
+// RBForwarder
+//------------------------------------------------------------------------------
 
 // Config stores the configuration for a forwarder
 type Config struct {
@@ -117,12 +122,6 @@ func (f *RBForwarder) Start() {
 	f.backend.source.Close()
 }
 
-// GetReports is used by the source to get a report for a sent message.
-// Reports are delivered on the same order that was sent
-func (f *RBForwarder) GetReports() <-chan Report {
-	return f.reportHandler.GetOrderedReports()
-}
-
 // Close stops the workers
 func (f *RBForwarder) Close() {
 	f.close <- struct{}{}
@@ -136,6 +135,18 @@ func (f *RBForwarder) SetSource(source Source) {
 // SetSenderHelper set a sender on the backend
 func (f *RBForwarder) SetSenderHelper(SenderHelper SenderHelper) {
 	f.backend.senderHelper = SenderHelper
+}
+
+// GetReports is used by the source to get a report for a sent message.
+// Reports are delivered on the same order that was sent
+func (f *RBForwarder) GetReports() <-chan Report {
+	return f.reportHandler.GetReports()
+}
+
+// GetOrderedReports is the same as GetReports() but the reports are delivered
+// in order
+func (f *RBForwarder) GetOrderedReports() <-chan Report {
+	return f.reportHandler.GetOrderedReports()
 }
 
 // TakeMessage returns a message from the message pool

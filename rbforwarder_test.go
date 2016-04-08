@@ -17,7 +17,7 @@ var senderChannel chan string
 var reportChannel chan Report
 var closeChannel chan string
 
-func (tsource *TestSource) Listen(f Forwarder) {
+func (tsource *TestSource) Listen(f *RBForwarder) {
 	go func() {
 		for msg := range sourceChannel {
 			message, _ := f.TakeMessage()
@@ -29,7 +29,7 @@ func (tsource *TestSource) Listen(f Forwarder) {
 	}()
 
 	go func() {
-		for report := range f.GetReports() {
+		for report := range f.GetOrderedReports() {
 			reportChannel <- report
 		}
 	}()
