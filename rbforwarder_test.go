@@ -10,7 +10,9 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-type TestSource struct{}
+type TestSource struct {
+	forwarder *RBForwarder
+}
 type TestSender struct{}
 type TestSenderHelper struct{}
 
@@ -19,10 +21,10 @@ var senderChannel chan string
 var reportChannel chan Report
 var closeChannel chan string
 
-func (tsource *TestSource) Listen(f *RBForwarder) {
+func (tsource *TestSource) Listen() {
 	go func() {
 		for msg := range sourceChannel {
-			message, err := f.TakeMessage()
+			message, err := tsource.forwarder.TakeMessage()
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -34,7 +36,7 @@ func (tsource *TestSource) Listen(f *RBForwarder) {
 	}()
 
 	go func() {
-		for report := range f.GetOrderedReports() {
+		for report := range tsource.forwarder.GetOrderedReports() {
 			select {
 			case reportChannel <- report:
 			default:
@@ -81,7 +83,6 @@ func TestBackend(t *testing.T) {
 		reportChannel = make(chan Report, 100)
 		closeChannel = make(chan string, 1)
 
-		source := new(TestSource)
 		senderHelper := new(TestSenderHelper)
 
 		rbforwarder := NewRBForwarder(Config{
@@ -89,9 +90,11 @@ func TestBackend(t *testing.T) {
 			Workers:   10,
 			QueueSize: 10000,
 		})
-		rbforwarder.SetSource(source)
 		rbforwarder.SetSenderHelper(senderHelper)
 
+		source := new(TestSource)
+		source.forwarder = rbforwarder
+		source.Listen()
 		rbforwarder.Start()
 
 		Convey("When a \"Hello World\" message is received", func() {
@@ -139,7 +142,5 @@ func TestBackend(t *testing.T) {
 				So(currentID, ShouldEqual, 100)
 			})
 		})
-
-		rbforwarder.Close()
 	})
 }
