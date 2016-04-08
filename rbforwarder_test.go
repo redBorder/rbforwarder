@@ -1,6 +1,8 @@
 package rbforwarder
 
 import (
+	"fmt"
+	"log"
 	"math/rand"
 	"testing"
 	"time"
@@ -20,23 +22,34 @@ var closeChannel chan string
 func (tsource *TestSource) Listen(f *RBForwarder) {
 	go func() {
 		for msg := range sourceChannel {
-			message, _ := f.TakeMessage()
+			message, err := f.TakeMessage()
+			if err != nil {
+				log.Fatal(err)
+			}
 			message.InputBuffer.WriteString(msg)
 			if err := message.Produce(); err != nil {
-				return
+				log.Fatal(err)
 			}
 		}
 	}()
 
 	go func() {
 		for report := range f.GetOrderedReports() {
-			reportChannel <- report
+			select {
+			case reportChannel <- report:
+			default:
+				log.Fatal("Can't send report to report channel")
+			}
 		}
 	}()
 }
 
 func (tsource *TestSource) Close() {
-	closeChannel <- "finish"
+	select {
+	case closeChannel <- "finish":
+	default:
+		log.Fatal("Cant send FINISH to close channel")
+	}
 }
 
 func (tsender *TestSender) Init(id int) error {
@@ -46,8 +59,14 @@ func (tsender *TestSender) Init(id int) error {
 func (tsender *TestSender) Send(m *Message) error {
 	// TODO Mock time
 	time.Sleep((time.Millisecond * 10) * time.Duration(rand.Int31n(50)))
-	m.Report(0, "OK")
-	senderChannel <- string(m.OutputBuffer.Bytes())
+	select {
+	case senderChannel <- string(m.OutputBuffer.Bytes()):
+		if err := m.Report(0, "OK"); err != nil {
+			log.Fatal(err)
+		}
+	default:
+		log.Fatal("Can't send message to sender channel")
+	}
 	return nil
 }
 
@@ -57,22 +76,21 @@ func (tsh *TestSenderHelper) CreateSender() Sender {
 
 func TestBackend(t *testing.T) {
 	Convey("Given a working backend", t, func() {
-		config := Config{
-			Retries:   0,
-			Workers:   10,
-			QueueSize: 100,
-		}
+		sourceChannel = make(chan string, 100)
+		senderChannel = make(chan string, 100)
+		reportChannel = make(chan Report, 100)
+		closeChannel = make(chan string, 1)
+
 		source := new(TestSource)
 		senderHelper := new(TestSenderHelper)
 
-		rbforwarder := NewRBForwarder(config)
+		rbforwarder := NewRBForwarder(Config{
+			Retries:   0,
+			Workers:   10,
+			QueueSize: 10000,
+		})
 		rbforwarder.SetSource(source)
 		rbforwarder.SetSenderHelper(senderHelper)
-
-		sourceChannel = make(chan string, 10)
-		senderChannel = make(chan string, 10)
-		reportChannel = make(chan Report, 10)
-		closeChannel = make(chan string, 10)
 
 		rbforwarder.Start()
 
@@ -93,34 +111,35 @@ func TestBackend(t *testing.T) {
 		})
 
 		Convey("When multiple messages are received", func() {
-			sourceChannel <- "Message 1"
-			sourceChannel <- "Message 2"
-			sourceChannel <- "Message 3"
-			sourceChannel <- "Message 4"
-			sourceChannel <- "Message 5"
-			sourceChannel <- "Message 6"
 
-			<-senderChannel
-			<-senderChannel
-			<-senderChannel
-			<-senderChannel
-			<-senderChannel
-			<-senderChannel
+			fmt.Println("")
+
+			for i := 0; i < 100; i++ {
+				select {
+				case sourceChannel <- "Message":
+				default:
+					log.Fatal("Can't send message to source channel")
+				}
+
+				go func() {
+					<-senderChannel
+				}()
+			}
 
 			Convey("Reports should be delivered ordered", func() {
-				report1 := <-reportChannel
-				report2 := <-reportChannel
-				report3 := <-reportChannel
-				report4 := <-reportChannel
-				report5 := <-reportChannel
-				report6 := <-reportChannel
-				So(report1.ID, ShouldEqual, 0)
-				So(report2.ID, ShouldEqual, 1)
-				So(report3.ID, ShouldEqual, 2)
-				So(report4.ID, ShouldEqual, 3)
-				So(report5.ID, ShouldEqual, 4)
-				So(report6.ID, ShouldEqual, 5)
+				var currentID uint64
+
+				for currentID = 0; currentID < 100; currentID++ {
+					report := <-reportChannel
+					if report.ID != currentID {
+						log.Fatal("Missmatched report")
+					}
+				}
+
+				So(currentID, ShouldEqual, 100)
 			})
 		})
+
+		rbforwarder.Close()
 	})
 }

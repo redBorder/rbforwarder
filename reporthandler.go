@@ -16,8 +16,8 @@ type reportHandler struct {
 	freedMessages chan *Message     // Used to send messages messages after its report has been delivered
 	unordered     chan Report       // Used to send reports out of order
 	out           chan Report       // Used to send reports in order
-	currentReport uint64            // Last delivered report
 	queued        map[uint64]Report // Used to store pending reports
+	currentReport uint64            // Last delivered report
 
 	config reportHandlerConfig
 }
@@ -26,9 +26,10 @@ type reportHandler struct {
 func newReportHandler(maxRetries int) *reportHandler {
 	return &reportHandler{
 		in:            make(chan *Message),
+		retries:       make(chan *Message),
+		freedMessages: make(chan *Message),
 		unordered:     make(chan Report),
 		out:           make(chan Report),
-		freedMessages: make(chan *Message),
 		queued:        make(map[uint64]Report),
 		config: reportHandlerConfig{
 			maxRetries: maxRetries,
@@ -59,10 +60,14 @@ func (r *reportHandler) Init() {
 				}
 
 				// Send the report to the orderer
-				select {
-				case r.unordered <- report:
-				case <-time.After(1 * time.Second):
-					logger.Error("Error on report: Full queue")
+			forLoop:
+				for {
+					select {
+					case r.unordered <- report:
+						break forLoop
+					case <-time.After(100 * time.Millisecond):
+						logger.Error("Error on report: Full queue")
+					}
 				}
 			} else {
 
@@ -111,16 +116,24 @@ func (r *reportHandler) Init() {
 }
 
 func (r *reportHandler) GetReports() chan Report {
+	done := make(chan struct{})
+
 	go func() {
+		done <- struct{}{}
+
 		for report := range r.unordered {
 			r.out <- report
 		}
 	}()
+
+	<-done
 	return r.out
 }
 
 func (r *reportHandler) GetOrderedReports() chan Report {
+	done := make(chan struct{})
 	go func() {
+		done <- struct{}{}
 		for report := range r.unordered {
 			if report.ID == r.currentReport {
 				// The message is the expected. Send it.
@@ -143,6 +156,6 @@ func (r *reportHandler) GetOrderedReports() chan Report {
 			}
 		}
 	}()
-
+	<-done
 	return r.out
 }
