@@ -3,7 +3,7 @@ package rbforwarder
 // Source is the component that gets data from a source, then sends the data
 // to the backend.
 type Source interface {
-	Listen(Forwarder)
+	Listen(*RBForwarder)
 	Close()
 }
 
@@ -34,12 +34,6 @@ type Sender interface {
 // SenderHelper is used to create Senders instances
 type SenderHelper interface {
 	CreateSender() Sender
-}
-
-// Forwarder is the interface to implement by RBForwarder
-type Forwarder interface {
-	TakeMessage() (message *Message, err error)
-	GetReports() <-chan Report
 }
 
 type backend struct {
