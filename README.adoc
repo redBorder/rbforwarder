@@ -46,59 +46,39 @@ in reporting system, so you can know if the messages has been delivered.
 | Milestone | Feature | Status
 
 | 0.1
-| Core
-| _Testing_
+| Backend
+| _In progress_
 
 | 0.2
-| Backend
-| _Testing_
+| Report Handler
+| _In progress_
 
 | 0.3
 | Stdout Sender
 | _In progress_
 
-| 0.3
-| JSON Decoder
-| _Pending_
-
-| 0.3
-| JSON Encoder
-| _Pending_
-
-| 0.3
-| JSON Template Processor
-| _Pending_
-
 | 0.4
-| Kafka Consumer
-| _In progress_
-
-| 0.5
 | HTTP Sender
 | _In progress_
 
-| 0.6
-| MQTT Suscriber
+| 0.5
+| JSON encoder/decoder
 | _Pending_
 
 | 0.6
-| MQTT Publisher
+| JSON Template Processor
 | _Pending_
 
 | 0.7
 | Kafka Producer
 | _Pending_
 
-| 0.7
-| HTTP Listener
-| _Pending_
-
 | 0.8
-| InfluxDB metrics
+| MQTT Publisher
 | _Pending_
 
 | 0.9
-| e2e testing
+| InfluxDB metrics
 | _Pending_
 
 | 1.0
@@ -113,25 +93,26 @@ This is an example config file for a MQTT to HTTP with json decoding/encoding:
 
 [source,yaml]
 ----
+backend:
+  workers: 10
+  queue: 10000
+  retries: 3
 source:
   type: "kafka"
-  config:
-    broker: "localhost:2181"
-    topics:
-      - "topic"
+  broker: "localhost:2181"
+  topics:
+    - "topic"
 decoder:
   type: "json"
 processor:
   type: "template"
-  config:
-    template: templates/template.json
+  template: templates/template.json
 encoder:
   type: "json"
 sender:
   type: "http"
-  config:
-    url: "http://localhost:8080"
-    batchsize: 100
-    batchtimeout: 500
-    deflate: true
+  url: "http://localhost:8080"
+  batchsize: 100
+  batchtimeout: 500
+  deflate: true
 ----
