@@ -113,6 +113,11 @@ func (f *RBForwarder) Start() {
 	}()
 }
 
+// Close stop pending actions
+func (f *RBForwarder) Close() {
+	f.reportHandler.close <- struct{}{}
+}
+
 // SetSenderHelper set a sender on the backend
 func (f *RBForwarder) SetSenderHelper(SenderHelper SenderHelper) {
 	f.backend.senderHelper = SenderHelper
