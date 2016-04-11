@@ -97,22 +97,19 @@ func (r *reportHandler) Init() {
 					if r.config.maxRetries < 0 ||
 						message.report.Retries < r.config.maxRetries {
 
-						select {
-						case <-r.close:
-							close(r.in)
-							close(r.out)
-							close(r.unordered)
-							logger.Info("Report handler closed")
-							break forOuterLoop
-						case <-time.After(time.Duration(r.config.backoff) * time.Second):
+						go func() {
 							message.report.Retries++
-							logger.Warnf("Retrying message: %d | Reason: %s",
-								message.report.ID, message.report.Status)
+							logger.
+								WithField("ID", message.report.ID).
+								WithField("Retry", message.report.Retries).
+								WithField("Reason", message.report.Status).
+								Warnf("Retrying message")
 
+							<-time.After(time.Duration(r.config.backoff) * time.Second)
 							if err := message.Produce(); err != nil {
 								logger.Error(err)
 							}
-						}
+						}()
 					} else {
 
 						// Give up

@@ -2,6 +2,7 @@ package rbforwarder
 
 import (
 	"bytes"
+	"errors"
 	"time"
 
 	"github.com/Sirupsen/logrus"
@@ -112,6 +113,9 @@ func (f *RBForwarder) Start() {
 
 	// Listen for reutilizable messages and send them back to the pool
 	go func() {
+		defer func() {
+			recover()
+		}()
 		for message := range f.reportHandler.freedMessages {
 			f.backend.messagePool <- message
 		}
@@ -120,6 +124,8 @@ func (f *RBForwarder) Start() {
 
 // Close stop pending actions
 func (f *RBForwarder) Close() {
+	close(f.reportHandler.freedMessages)
+	close(f.backend.messagePool)
 	f.reportHandler.close <- struct{}{}
 }
 
@@ -142,12 +148,9 @@ func (f *RBForwarder) GetOrderedReports() <-chan Report {
 
 // TakeMessage returns a message from the message pool
 func (f *RBForwarder) TakeMessage() (message *Message, err error) {
-	for {
-		select {
-		case message = <-f.backend.messagePool:
-			return
-		case <-time.After(500 * time.Millisecond):
-			logger.Warn("Error taking message from pool")
-		}
+	message, ok := <-f.backend.messagePool
+	if !ok {
+		err = errors.New("Pool closed")
 	}
+	return
 }
