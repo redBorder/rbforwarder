@@ -47,6 +47,7 @@ type batchBuffer struct {
 
 type config struct {
 	URL          string
+	Endpoint     string
 	IgnoreCert   bool
 	Deflate      bool
 	ShowCounter  int
@@ -96,7 +97,7 @@ func (s *Sender) Send(message *rbforwarder.Message) error {
 	var path string
 
 	if message.Metadata["topic"] != nil {
-		path = message.Metadata["topic"].(string)
+		path = message.Metadata[s.config.Endpoint].(string)
 	}
 
 	// Initialize buffer for path
