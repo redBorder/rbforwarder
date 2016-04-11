@@ -27,6 +27,7 @@ type reportHandler struct {
 	freedMessages chan *Message     // Used to send messages messages after its report has been delivered
 	unordered     chan Report       // Used to send reports out of order
 	out           chan Report       // Used to send reports in order
+	close         chan struct{}     // Used to stop sending reports
 	queued        map[uint64]Report // Used to store pending reports
 	currentReport uint64            // Last delivered report
 
@@ -41,6 +42,7 @@ func newReportHandler(maxRetries, backoff, queue int) *reportHandler {
 		freedMessages: make(chan *Message, queue),
 		unordered:     make(chan Report, queue),
 		out:           make(chan Report, queue),
+		close:         make(chan struct{}),
 		queued:        make(map[uint64]Report),
 		config: reportHandlerConfig{
 			maxRetries: maxRetries,
@@ -90,15 +92,19 @@ func (r *reportHandler) Init() {
 				// Retry this message
 				if r.config.maxRetries < 0 ||
 					message.report.Retries < r.config.maxRetries {
-					go func(message *Message) {
-						time.Sleep(time.Duration(r.config.backoff) * time.Second)
+
+					select {
+					case <-r.close:
+						close(r.out)
+					case <-time.After(time.Duration(r.config.backoff) * time.Second):
 						message.report.Retries++
 						logger.Warnf("Retrying message: %d | Reason: %s",
 							message.report.ID, message.report.Status)
+
 						if err := message.Produce(); err != nil {
 							logger.Error(err)
 						}
-					}(message)
+					}
 				} else {
 
 					// Give up
