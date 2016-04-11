@@ -35,6 +35,10 @@ func parseConfig(raw map[string]interface{}) (parsed config, err error) {
 		log.Fatal("No url provided")
 	}
 
+	if raw["endpoint"] != nil {
+		parsed.Endpoint = raw["endpoint"].(string)
+	}
+
 	if raw["insecure"] != nil {
 		parsed.IgnoreCert = raw["insecure"].(bool)
 	}
