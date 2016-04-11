@@ -102,6 +102,7 @@ func (f *RBForwarder) Start() {
 	go func() {
 		for message := range f.backend.reports {
 			f.reportHandler.in <- message
+			f.counter++
 		}
 	}()
 
