@@ -17,9 +17,11 @@ var logger *logrus.Entry
 // Config stores the configuration for a forwarder
 type Config struct {
 	Retries     int
+	Backoff     int
 	Workers     int
 	QueueSize   int
 	ShowCounter int
+	Debug       bool
 }
 
 // RBForwarder is the main objecto of the package. It has the main methods for
@@ -36,11 +38,15 @@ type RBForwarder struct {
 
 // NewRBForwarder creates a new Forwarder object
 func NewRBForwarder(config Config) *RBForwarder {
+	if config.Debug {
+		LogLevel(logrus.DebugLevel)
+	}
+
 	logger = NewLogger("backend")
 
 	forwarder := &RBForwarder{
 		backend:       newBackend(config.Workers, config.QueueSize),
-		reportHandler: newReportHandler(config.Retries),
+		reportHandler: newReportHandler(config.Retries, config.Backoff, config.QueueSize),
 		reports:       make(chan Report, config.QueueSize),
 		config:        config,
 	}
