@@ -96,7 +96,7 @@ func (s *Sender) Send(message *rbforwarder.Message) error {
 	// We can send batch only for messages with the same path
 	var path string
 
-	if message.Metadata["topic"] != nil {
+	if message.Metadata[s.config.Endpoint] != nil {
 		path = message.Metadata[s.config.Endpoint].(string)
 	}
 
