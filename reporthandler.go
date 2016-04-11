@@ -14,6 +14,8 @@ type Report struct {
 // reportHandlerConfig is used to store the configuration for the reportHandler
 type reportHandlerConfig struct {
 	maxRetries int
+	backoff    int
+	queue      int
 }
 
 // reportHandler is used to handle the reports produced by the last element
@@ -32,16 +34,17 @@ type reportHandler struct {
 }
 
 // newReportHandler creates a new instance of reportHandler
-func newReportHandler(maxRetries int) *reportHandler {
+func newReportHandler(maxRetries, backoff, queue int) *reportHandler {
 	return &reportHandler{
-		in:            make(chan *Message),
-		retries:       make(chan *Message),
-		freedMessages: make(chan *Message),
-		unordered:     make(chan Report),
-		out:           make(chan Report),
+		in:            make(chan *Message, queue),
+		retries:       make(chan *Message, queue),
+		freedMessages: make(chan *Message, queue),
+		unordered:     make(chan Report, queue),
+		out:           make(chan Report, queue),
 		queued:        make(map[uint64]Report),
 		config: reportHandlerConfig{
 			maxRetries: maxRetries,
+			backoff:    backoff,
 		},
 	}
 }
@@ -52,13 +55,15 @@ func (r *reportHandler) Init() {
 		// Get reports from the input channel
 		for message := range r.in {
 			if message.report.StatusCode == 0 {
+				// Create a copy of the report
+				report := message.report
+				report.Metadata = message.Metadata
+
+				// Reset message data
 				message.InputBuffer.Reset()
 				message.OutputBuffer.Reset()
 				message.Data = nil
 				message.Metadata = make(map[string]interface{})
-
-				// Send to the source a copy of the report
-				report := message.report
 				message.report = Report{}
 
 				// Send back the message to the pool
@@ -85,13 +90,15 @@ func (r *reportHandler) Init() {
 				// Retry this message
 				if r.config.maxRetries < 0 ||
 					message.report.Retries < r.config.maxRetries {
-
-					message.report.Retries++
-					logger.Warnf("Retrying message: %d | Reason: %s",
-						message.report.ID, message.report.Status)
-					if err := message.Produce(); err != nil {
-						logger.Error(err)
-					}
+					go func(message *Message) {
+						time.Sleep(time.Duration(r.config.backoff) * time.Second)
+						message.report.Retries++
+						logger.Warnf("Retrying message: %d | Reason: %s",
+							message.report.ID, message.report.Status)
+						if err := message.Produce(); err != nil {
+							logger.Error(err)
+						}
+					}(message)
 				} else {
 
 					// Give up
@@ -165,6 +172,7 @@ func (r *reportHandler) GetOrderedReports() chan Report {
 			}
 		}
 	}()
+
 	<-done
 	return r.out
 }
