@@ -89,11 +89,13 @@ func (f *RBForwarder) Start() {
 					time.Duration(f.config.ShowCounter) * time.Second,
 				)
 				<-timer.C
-				logger.Infof(
-					"Messages per second %d",
-					f.counter/uint64(f.config.ShowCounter),
-				)
-				f.counter = 0
+				if f.counter > 0 {
+					logger.Infof(
+						"Messages per second %d",
+						f.counter/uint64(f.config.ShowCounter),
+					)
+					f.counter = 0
+				}
 			}
 		}()
 	}
@@ -101,8 +103,10 @@ func (f *RBForwarder) Start() {
 	// Get reports from the backend and send them to the reportHandler
 	go func() {
 		for message := range f.backend.reports {
+			if message.report.StatusCode == 0 {
+				f.counter++
+			}
 			f.reportHandler.in <- message
-			f.counter++
 		}
 	}()
 
