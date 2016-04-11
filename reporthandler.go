@@ -55,81 +55,90 @@ func newReportHandler(maxRetries, backoff, queue int) *reportHandler {
 func (r *reportHandler) Init() {
 	go func() {
 		// Get reports from the input channel
-		for message := range r.in {
-			if message.report.StatusCode == 0 {
-				// Create a copy of the report
-				report := message.report
-				report.Metadata = message.Metadata
 
-				// Reset message data
-				message.InputBuffer.Reset()
-				message.OutputBuffer.Reset()
-				message.Data = nil
-				message.Metadata = make(map[string]interface{})
-				message.report = Report{}
+	forOuterLoop:
+		for {
+			select {
+			case <-r.close:
+				break forOuterLoop
+			case message := <-r.in:
+				if message.report.StatusCode == 0 {
+					// Create a copy of the report
+					report := message.report
+					report.Metadata = message.Metadata
 
-				// Send back the message to the pool
-				select {
-				case r.freedMessages <- message:
-				case <-time.After(1 * time.Second):
-					logger.Error("Can't put back the message on the pool")
-				}
-
-				// Send the report to the orderer
-			forLoop:
-				for {
-					select {
-					case r.unordered <- report:
-						break forLoop
-					case <-time.After(100 * time.Millisecond):
-						logger.Error("Error on report: Full queue")
-					}
-				}
-			} else {
-
-				// Fail
-
-				// Retry this message
-				if r.config.maxRetries < 0 ||
-					message.report.Retries < r.config.maxRetries {
-
-					select {
-					case <-r.close:
-						close(r.out)
-					case <-time.After(time.Duration(r.config.backoff) * time.Second):
-						message.report.Retries++
-						logger.Warnf("Retrying message: %d | Reason: %s",
-							message.report.ID, message.report.Status)
-
-						if err := message.Produce(); err != nil {
-							logger.Error(err)
-						}
-					}
-				} else {
-
-					// Give up
-
-					// Clean the message before send it to the message pool
+					// Reset message data
 					message.InputBuffer.Reset()
 					message.OutputBuffer.Reset()
 					message.Data = nil
 					message.Metadata = make(map[string]interface{})
+					message.report = Report{}
 
 					// Send back the message to the pool
 					select {
 					case r.freedMessages <- message:
-					default:
+					case <-time.After(1 * time.Second):
 						logger.Error("Can't put back the message on the pool")
 					}
 
-					// Send to the source a copy of the report
-					report := message.report
-					message.report = Report{}
+					// Send the report to the orderer
+				forLoop:
+					for {
+						select {
+						case r.unordered <- report:
+							break forLoop
+						case <-time.After(100 * time.Millisecond):
+							logger.Error("Error on report: Full queue")
+						}
+					}
+				} else {
 
-					select {
-					case r.unordered <- report:
-					default:
-						logger.Error("Error on report: Full queue")
+					// Retry this message
+					if r.config.maxRetries < 0 ||
+						message.report.Retries < r.config.maxRetries {
+
+						select {
+						case <-r.close:
+							close(r.in)
+							close(r.out)
+							close(r.unordered)
+							logger.Info("Report handler closed")
+							break forOuterLoop
+						case <-time.After(time.Duration(r.config.backoff) * time.Second):
+							message.report.Retries++
+							logger.Warnf("Retrying message: %d | Reason: %s",
+								message.report.ID, message.report.Status)
+
+							if err := message.Produce(); err != nil {
+								logger.Error(err)
+							}
+						}
+					} else {
+
+						// Give up
+
+						// Clean the message before send it to the message pool
+						message.InputBuffer.Reset()
+						message.OutputBuffer.Reset()
+						message.Data = nil
+						message.Metadata = make(map[string]interface{})
+
+						// Send back the message to the pool
+						select {
+						case r.freedMessages <- message:
+						default:
+							logger.Error("Can't put back the message on the pool")
+						}
+
+						// Send to the source a copy of the report
+						report := message.report
+						message.report = Report{}
+
+						select {
+						case r.unordered <- report:
+						default:
+							logger.Error("Error on report: Full queue")
+						}
 					}
 				}
 			}
