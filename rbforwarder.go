@@ -1,7 +1,6 @@
 package rbforwarder
 
 import (
-	"bytes"
 	"errors"
 	"sync/atomic"
 	"time"
@@ -22,8 +21,8 @@ type Config struct {
 	Backoff     int
 	Workers     int
 	QueueSize   int
-	MaxMessages uint64
-	MaxBytes    uint64
+	MaxMessages int
+	MaxBytes    int
 	ShowCounter int
 	Debug       bool
 }
@@ -37,10 +36,6 @@ type RBForwarder struct {
 	reports       chan Report
 	counter       uint64
 
-	keepSending     chan struct{}
-	currentMessages uint64
-	currentBytes    uint64
-
 	config Config
 }
 
@@ -52,28 +47,25 @@ func NewRBForwarder(config Config) *RBForwarder {
 
 	logger = NewLogger("backend")
 
+	backend := &backend{
+		workers:     config.Workers,
+		queue:       config.QueueSize,
+		maxMessages: config.MaxMessages,
+		maxBytes:    config.MaxBytes,
+	}
+
 	forwarder := &RBForwarder{
-		backend:       newBackend(config.Workers, config.QueueSize),
+		backend:       backend,
 		reportHandler: newReportHandler(config.Retries, config.Backoff, config.QueueSize),
 		reports:       make(chan Report, config.QueueSize),
-		keepSending:   make(chan struct{}),
 		config:        config,
 	}
 
-	for i := 0; i < config.QueueSize; i++ {
-		forwarder.backend.messagePool <- &Message{
-			Metadata:     make(map[string]interface{}),
-			InputBuffer:  new(bytes.Buffer),
-			OutputBuffer: new(bytes.Buffer),
-
-			backend: forwarder.backend,
-		}
-	}
-
 	fields := logrus.Fields{
-		"workers":    config.Workers,
-		"retries":    config.Retries,
-		"queue_size": config.QueueSize,
+		"workers":      config.Workers,
+		"retries":      config.Retries,
+		"queue_size":   config.QueueSize,
+		"max_messages": config.MaxMessages,
 	}
 	logger.WithFields(fields).Info("Initialized rB Forwarder")
 
@@ -84,7 +76,7 @@ func NewRBForwarder(config Config) *RBForwarder {
 func (f *RBForwarder) Start() {
 
 	// Start the backend
-	f.backend.Init(f.config.Workers)
+	f.backend.Init()
 	logger.Info("Backend ready")
 
 	// Start the report handler
@@ -109,22 +101,11 @@ func (f *RBForwarder) Start() {
 		}()
 	}
 
-	// Limit the messages/bytes per second
-	go func() {
-		for {
-			timer := time.NewTimer(1 * time.Second)
-			<-timer.C
-			f.keepSending <- struct{}{}
-		}
-	}()
-
 	// Get reports from the backend and send them to the reportHandler
 	go func() {
 		for message := range f.backend.reports {
 			if message.report.StatusCode == 0 {
 				atomic.AddUint64(&f.counter, 1)
-				atomic.AddUint64(&f.currentMessages, 1)
-				atomic.AddUint64(&f.currentBytes, uint64(message.OutputBuffer.Len()))
 			}
 			f.reportHandler.in <- message
 		}
@@ -167,16 +148,6 @@ func (f *RBForwarder) GetOrderedReports() <-chan Report {
 
 // TakeMessage returns a message from the message pool
 func (f *RBForwarder) TakeMessage() (message *Message, err error) {
-
-	// Wait if the limit has ben reached
-	if f.config.MaxMessages > 0 && f.currentMessages >= f.config.MaxMessages {
-		<-f.keepSending
-		atomic.StoreUint64(&f.currentMessages, 0)
-	} else if f.config.MaxBytes > 0 && f.currentBytes >= f.config.MaxBytes {
-		<-f.keepSending
-		atomic.StoreUint64(&f.currentBytes, 0)
-	}
-
 	message, ok := <-f.backend.messagePool
 	if !ok {
 		err = errors.New("Pool closed")

@@ -1,5 +1,10 @@
 package rbforwarder
 
+import (
+	"bytes"
+	"time"
+)
+
 // Decoder is the component that parses a raw buffer to a structure
 type Decoder interface {
 	Init(int) error
@@ -46,28 +51,54 @@ type backend struct {
 	messages    chan *Message
 	reports     chan *Message
 	messagePool chan *Message
+
+	workers     int
+	queue       int
+	maxMessages int
+	maxBytes    int
+
+	currentMessages uint64
+	currentBytes    uint64
+	keepSending     chan struct{}
 }
 
-func newBackend(workers, queueSize int) *backend {
-	return &backend{
-		decoderPool:   make(chan chan *Message, workers),
-		processorPool: make(chan chan *Message, workers),
-		encoderPool:   make(chan chan *Message, workers),
-		senderPool:    make(chan chan *Message, workers),
+func (b *backend) Init() {
+	b.decoderPool = make(chan chan *Message, b.workers)
+	b.processorPool = make(chan chan *Message, b.workers)
+	b.encoderPool = make(chan chan *Message, b.workers)
+	b.senderPool = make(chan chan *Message, b.workers)
 
-		messages:    make(chan *Message, queueSize),
-		reports:     make(chan *Message, queueSize),
-		messagePool: make(chan *Message, queueSize),
+	b.messages = make(chan *Message, b.queue)
+	b.reports = make(chan *Message, b.queue)
+	b.messagePool = make(chan *Message, b.queue)
+
+	b.keepSending = make(chan struct{})
+
+	for i := 0; i < b.queue; i++ {
+		b.messagePool <- &Message{
+			Metadata:     make(map[string]interface{}),
+			InputBuffer:  new(bytes.Buffer),
+			OutputBuffer: new(bytes.Buffer),
+
+			backend: b,
+		}
 	}
-}
 
-func (b *backend) Init(workers int) {
-	for i := 0; i < workers; i++ {
+	for i := 0; i < b.workers; i++ {
 		b.startDecoder(i)
 		b.startProcessor(i)
 		b.startEncoder(i)
 		b.startSender(i)
 	}
+
+	// Limit the messages/bytes per second
+	go func() {
+		for {
+			timer := time.NewTimer(1 * time.Second)
+			<-timer.C
+			b.keepSending <- struct{}{}
+		}
+	}()
 }
 
 // Worker that decodes the received message

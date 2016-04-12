@@ -25,6 +25,17 @@ type Message struct {
 // Produce is used by the source to send messages to the backend
 func (m *Message) Produce() error {
 
+	backend := m.backend
+
+	// Wait if the limit has ben reached
+	if backend.maxMessages > 0 && backend.currentMessages >= uint64(backend.maxMessages) {
+		<-backend.keepSending
+		atomic.StoreUint64(&backend.currentMessages, 0)
+	} else if backend.maxBytes > 0 && backend.currentBytes >= uint64(backend.maxBytes) {
+		<-backend.keepSending
+		atomic.StoreUint64(&backend.currentBytes, 0)
+	}
+
 	// This is no a retry
 	if m.report.Retries == 0 {
 		m.report = Report{
@@ -37,6 +48,8 @@ func (m *Message) Produce() error {
 	case messageChannel := <-m.backend.decoderPool:
 		select {
 		case messageChannel <- m:
+			atomic.AddUint64(&backend.currentMessages, 1)
+			atomic.AddUint64(&backend.currentBytes, uint64(m.OutputBuffer.Len()))
 		case <-time.After(1 * time.Second):
 			return errors.New("Error on produce: Full queue")
 		}
