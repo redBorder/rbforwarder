@@ -62,7 +62,17 @@ func (r *reportHandler) Init() {
 			case <-r.close:
 				break forOuterLoop
 			case message := <-r.in:
-				if message.report.StatusCode == 0 {
+
+				// Report when:
+				// - Message has been received successfully
+				// - Retrying has been disabled
+				// - The max number of retries has been reached
+				// Retry in the other case
+				if message.report.StatusCode == 0 ||
+					r.config.maxRetries == 0 ||
+					(r.config.maxRetries > 0 &&
+						message.report.Retries >= r.config.maxRetries) {
+
 					// Create a copy of the report
 					report := message.report
 					report.Metadata = message.Metadata
@@ -75,68 +85,40 @@ func (r *reportHandler) Init() {
 					message.report = Report{}
 
 					// Send back the message to the pool
-					select {
-					case r.freedMessages <- message:
-					case <-time.After(1 * time.Second):
-						logger.Error("Can't put back the message on the pool")
+				returnReportLoop:
+					for {
+						select {
+						case r.freedMessages <- message:
+							break returnReportLoop
+						case <-time.After(1 * time.Second):
+							logger.Warn("Can't put back the message on the pool")
+						}
 					}
 
-					// Send the report to the orderer
-				forLoop:
+					// Send the report to the client
+				sendReportLoop:
 					for {
 						select {
 						case r.unordered <- report:
-							break forLoop
+							break sendReportLoop
 						case <-time.After(100 * time.Millisecond):
-							logger.Error("Error on report: Full queue")
+							logger.Warn("Error on report: Full queue")
 						}
 					}
 				} else {
+					go func() {
+						message.report.Retries++
+						logger.
+							WithField("ID", message.report.ID).
+							WithField("Retry", message.report.Retries).
+							WithField("Reason", message.report.Status).
+							Warnf("Retrying message")
 
-					// Retry this message
-					if r.config.maxRetries < 0 ||
-						message.report.Retries < r.config.maxRetries {
-
-						go func() {
-							message.report.Retries++
-							logger.
-								WithField("ID", message.report.ID).
-								WithField("Retry", message.report.Retries).
-								WithField("Reason", message.report.Status).
-								Warnf("Retrying message")
-
-							<-time.After(time.Duration(r.config.backoff) * time.Second)
-							if err := message.Produce(); err != nil {
-								logger.Error(err)
-							}
-						}()
-					} else {
-
-						// Give up
-
-						// Clean the message before send it to the message pool
-						message.InputBuffer.Reset()
-						message.OutputBuffer.Reset()
-						message.Data = nil
-						message.Metadata = make(map[string]interface{})
-
-						// Send back the message to the pool
-						select {
-						case r.freedMessages <- message:
-						default:
-							logger.Error("Can't put back the message on the pool")
+						<-time.After(time.Duration(r.config.backoff) * time.Second)
+						if err := message.Produce(); err != nil {
+							logger.Error(err)
 						}
-
-						// Send to the source a copy of the report
-						report := message.report
-						message.report = Report{}
-
-						select {
-						case r.unordered <- report:
-						default:
-							logger.Error("Error on report: Full queue")
-						}
-					}
+					}()
 				}
 			}
 		}
