@@ -126,8 +126,8 @@ func (f *RBForwarder) Start() {
 
 // Close stop pending actions
 func (f *RBForwarder) Close() {
-	close(f.reportHandler.freedMessages)
 	close(f.backend.messagePool)
+	f.backend.active = false
 	f.reportHandler.close <- struct{}{}
 }
 

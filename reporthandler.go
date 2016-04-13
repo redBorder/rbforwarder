@@ -122,6 +122,7 @@ func (r *reportHandler) Init() {
 				}
 			}
 		}
+		close(r.unordered)
 	}()
 }
 
@@ -134,6 +135,7 @@ func (r *reportHandler) GetReports() chan Report {
 		for report := range r.unordered {
 			r.out <- report
 		}
+		close(r.out)
 	}()
 
 	<-done
@@ -165,6 +167,7 @@ func (r *reportHandler) GetOrderedReports() chan Report {
 				}
 			}
 		}
+		close(r.out)
 	}()
 
 	<-done
