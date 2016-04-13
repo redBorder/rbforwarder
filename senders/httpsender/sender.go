@@ -57,14 +57,11 @@ type config struct {
 
 // Init initializes an HTTP sender
 func (s *Sender) Init(id int) error {
-	logger = rbforwarder.NewLogger("sender")
-
 	s.id = id
 
 	// Create the client object. Useful for skipping SSL verify
 	tr := &http.Transport{}
 	if s.config.IgnoreCert {
-		logger.Warn("Ignoring SSL certificates")
 		tr.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 	s.client = &http.Client{Transport: tr}
