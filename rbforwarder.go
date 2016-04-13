@@ -102,7 +102,9 @@ func (f *RBForwarder) Start() {
 	}
 
 	// Get reports from the backend and send them to the reportHandler
+	done := make(chan struct{})
 	go func() {
+		done <- struct{}{}
 		for message := range f.backend.reports {
 			if message.report.StatusCode == 0 {
 				atomic.AddUint64(&f.counter, 1)
@@ -110,16 +112,16 @@ func (f *RBForwarder) Start() {
 			f.reportHandler.in <- message
 		}
 	}()
+	<-done
 
 	// Listen for reutilizable messages and send them back to the pool
 	go func() {
-		defer func() {
-			recover()
-		}()
+		done <- struct{}{}
 		for message := range f.reportHandler.freedMessages {
 			f.backend.messagePool <- message
 		}
 	}()
+	<-done
 }
 
 // Close stop pending actions
