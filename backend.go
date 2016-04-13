@@ -48,6 +48,7 @@ type backend struct {
 
 	currentProducedID uint64
 
+	input       chan *Message
 	messages    chan *Message
 	reports     chan *Message
 	messagePool chan *Message
@@ -56,6 +57,8 @@ type backend struct {
 	queue       int
 	maxMessages int
 	maxBytes    int
+
+	active bool
 
 	currentMessages uint64
 	currentBytes    uint64
@@ -69,6 +72,7 @@ func (b *backend) Init() {
 	b.senderPool = make(chan chan *Message, b.workers)
 
 	b.messages = make(chan *Message, b.queue)
+	b.input = make(chan *Message)
 	b.reports = make(chan *Message, b.queue)
 	b.messagePool = make(chan *Message, b.queue)
 
@@ -99,6 +103,42 @@ func (b *backend) Init() {
 			b.keepSending <- struct{}{}
 		}
 	}()
+
+	// Get messages from produces
+	done := make(chan struct{})
+	go func() {
+		done <- struct{}{}
+		for m := range b.input {
+
+			// Wait if the limit has ben reached
+			if b.maxMessages > 0 && b.currentMessages >= uint64(b.maxMessages) {
+				<-b.keepSending
+				b.currentMessages = 0
+			} else if b.maxBytes > 0 && b.currentBytes >= uint64(b.maxBytes) {
+				<-b.keepSending
+				b.currentBytes = 0
+			}
+
+			// Send to workers
+			select {
+			case messageChannel := <-b.decoderPool:
+				select {
+				case messageChannel <- m:
+					b.currentMessages++
+					b.currentBytes += uint64(m.OutputBuffer.Len())
+				case <-time.After(1 * time.Second):
+					logger.Warn("Error on produce: Full queue")
+				}
+			case <-time.After(1 * time.Second):
+				if err := m.Report(-1, "Error on produce: No workers available"); err != nil {
+					logger.Warn(err)
+				}
+			}
+		}
+	}()
+	<-done
+
+	b.active = true
 }
 
 // Worker that decodes the received message
