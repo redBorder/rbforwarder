@@ -1,9 +1,8 @@
-|===
-| Master | Develop
-
-| image:https://travis-ci.org/redBorder/rbforwarder.svg?branch=master["Build Status", link="https://travis-ci.org/redBorder/rbforwarder"]
-| image:https://travis-ci.org/redBorder/rbforwarder.svg?branch=develop["Build Status", link="https://travis-ci.org/redBorder/rbforwarder"]
-|===
+image:https://img.shields.io/packagist/l/doctrine/orm.svg?maxAge=2592000[]
+image:https://travis-ci.org/redBorder/rbforwarder.svg?branch=master["Build Status", link="https://travis-ci.org/redBorder/rbforwarder"]
+image:https://goreportcard.com/badge/github.com/redBorder/rbforwarder["Go Report", link=https://goreportcard.com/report/github.com/redBorder/rbforwarder]
+image:https://coveralls.io/repos/github/redBorder/rbforwarder/badge.svg?branch=master["Coverage",link=https://coveralls.io/github/redBorder/rbforwarder?branch=master]
+image:https://godoc.org/github.com/redBorder/rbforwarder?status.svg[link=https://godoc.org/github.com/redBorder/rbforwarder]
 
 = rbforwarder
 
