@@ -101,8 +101,8 @@ func (r *reportHandler) Init() {
 						select {
 						case r.unordered <- report:
 							break sendReportLoop
-						case <-time.After(100 * time.Millisecond):
-							logger.Warn("Error on report: Full queue")
+						case <-time.After(500 * time.Millisecond):
+							logger.Warn("Delivering report: Full queue")
 						}
 					}
 				} else {
@@ -111,7 +111,8 @@ func (r *reportHandler) Init() {
 						logger.
 							WithField("ID", message.report.ID).
 							WithField("Retry", message.report.Retries).
-							WithField("Reason", message.report.Status).
+							WithField("Status", message.report.Status).
+							WithField("Code", message.report.StatusCode).
 							Warnf("Retrying message")
 
 						<-time.After(time.Duration(r.config.backoff) * time.Second)
