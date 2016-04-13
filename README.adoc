@@ -1,28 +1,27 @@
-[![Build Status](https://travis-ci.org/Bigomby/go-pipes.svg?branch=master)](https://travis-ci.org/Bigomby/go-pipes)
-[![Coverage Status](https://coveralls.io/repos/Bigomby/go-pipes/badge.svg?branch=master&service=github)](https://coveralls.io/github/Bigomby/go-pipes?branch=master)
+|===
+| Master | Develop
+
+| image:https://travis-ci.org/redBorder/rbforwarder.svg?branch=master["Build Status", link="https://travis-ci.org/redBorder/rbforwarder"]
+| image:https://travis-ci.org/redBorder/rbforwarder.svg?branch=develop["Build Status", link="https://travis-ci.org/redBorder/rbforwarder"]
+|===
 
 = rbforwarder
 
-*rbforwarder* is a multi-protocol data forwarder. You can use it to pipe data
-between different protocols.
+*rbforwarder* is a multi-protocol data forwarder. You can use it to forward data
+between different protocols, for instance, creating a Kafka consumer to get
+data from Kafka and use rbforwarder to send it to an HTTP endpoint.
 
 The application also support decoding, encoding and processing data, for example
 it can decode a JSON and performs modifications on it before send it encoded as
 JSON again.
 
-This application uses a backend to route received data. Support multiple workers
-on each stage (decoding, encoding, processing and sending). It also has a built
-in reporting system, so you can know if the messages has been delivered.
+The application uses a pipeline with multiple workers to process data. It also
+have a reporter to know if messages has been delivered successfully and can
+retry messages on fail.
 
 == Components
 
-*Sources*
-
-* HTTP
-* Kafka
-* MQTT
-
-*Outputs*
+*Senders*
 
 * MQTT
 * HTTP
@@ -42,92 +41,39 @@ in reporting system, so you can know if the messages has been delivered.
 | Milestone | Feature | Status
 
 | 0.1
-| Core
-| 0.0%
+| Backend
+| _Beta_
 
 | 0.2
-| Backend
-| 0.0%
-
-| 0.3
-| Stdout Sender
-| 0.0%
-
-| 0.3
-| JSON Decoder
-| 0.0%
-
-| 0.3
-| JSON Encoder
-| 0.0%
-
-| 0.3
-| JSON Template Processor
-| 0.0%
+| Report Handler
+| _Beta_
 
 | 0.4
-| Kafka Consumer
-| 0.0%
+| HTTP Sender
+| _Beta_
 
 | 0.5
-| HTTP Sender
-| 0.0%
+| JSON encoder/decoder
+| _Pending_
 
 | 0.6
-| MQTT Suscriber
-| 0.0%
-
-| 0.6
-| MQTT Publisher
-| 0.0%
+| JSON Template Processor
+| _Pending_
 
 | 0.7
 | Kafka Producer
-| 0.0%
-
-| 0.7
-| HTTP Listener
-| 0.0%
+| _Pending_
 
 | 0.8
-| InfluxDB metrics
-| 0.0%
+| MQTT Publisher
+| _Pending_
 
 | 0.9
-| e2e testing
-| 0.0%
+| InfluxDB metrics
+| _Pending_
 
 | 1.0
 | Benchmarks
-| 0.0%
+| _Pending_
 
 |===
-
-== Example config file
-
-This is an example config file for a MQTT to HTTP with json decoding/encoding:
-
-[source,yaml]
-----
-listener:
-  type: "kafka"
-  config:
-    broker: "localhost:2181"
-    topics:
-      - "topic"
-decoder:
-  type: "json"
-processor:
-  type: "template"
-  config:
-    template: templates/template.json
-encoder:
-  type: "json"
-sender:
-  type: "http"
-  config:
-    url: "http://localhost:8080"
-    batchsize: 100
-    batchtimeout: 500
-    deflate: true
-----
