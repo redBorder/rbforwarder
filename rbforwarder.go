@@ -8,6 +8,9 @@ import (
 	"github.com/Sirupsen/logrus"
 )
 
+// Version is the current tag
+var Version = "0.4-beta"
+
 // Logger for the package
 var logger *logrus.Entry
 
