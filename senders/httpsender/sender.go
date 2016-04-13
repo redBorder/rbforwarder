@@ -15,9 +15,9 @@ import (
 )
 
 const (
-	errRequest = 1
-	errStatus  = 2
-	errHTTP    = 3
+	errRequest = 101
+	errStatus  = 102
+	errHTTP    = 103
 )
 
 var logger *logrus.Entry
