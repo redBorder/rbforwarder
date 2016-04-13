@@ -7,16 +7,17 @@
 
 = rbforwarder
 
-*rbforwarder* is a multi-protocol data forwarder. You can use it to pipe data
-between different protocols.
+*rbforwarder* is a multi-protocol data forwarder. You can use it to forward data
+between different protocols, for instance, creating a Kafka consumer to get
+data from Kafka and use rbforwarder to send it to an HTTP endpoint.
 
 The application also support decoding, encoding and processing data, for example
 it can decode a JSON and performs modifications on it before send it encoded as
 JSON again.
 
-This application uses a backend to route received data. Support multiple workers
-on each stage (decoding, encoding, processing and sending). It also has a built
-in reporting system, so you can know if the messages has been delivered.
+The application uses a pipeline with multiple workers to process data. It also
+have a reporter to know if messages has been delivered successfully and can
+retry messages on fail.
 
 == Components
 
@@ -41,19 +42,15 @@ in reporting system, so you can know if the messages has been delivered.
 
 | 0.1
 | Backend
-| _In progress_
+| _Beta_
 
 | 0.2
 | Report Handler
-| _In progress_
-
-| 0.3
-| Stdout Sender
-| _In progress_
+| _Beta_
 
 | 0.4
 | HTTP Sender
-| _In progress_
+| _Beta_
 
 | 0.5
 | JSON encoder/decoder
