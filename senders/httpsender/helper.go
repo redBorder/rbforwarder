@@ -9,20 +9,23 @@ import (
 
 // Helper is used to create instances of HTTP senders
 type Helper struct {
-	rawConfig map[string]interface{}
+	config config
 }
 
 // NewHelper creates a new sender helper
 func NewHelper(rawConfig map[string]interface{}) Helper {
+	logger = rbforwarder.NewLogger("sender")
+	parsedConfig, _ := parseConfig(rawConfig)
+
 	return Helper{
-		rawConfig: rawConfig,
+		config: parsedConfig,
 	}
 }
 
 // CreateSender returns an instance of HTTP Sender
 func (s Helper) CreateSender() rbforwarder.Sender {
 	httpSender := new(Sender)
-	httpSender.config, _ = parseConfig(s.rawConfig)
+	httpSender.config = s.config
 
 	return httpSender
 }
@@ -41,6 +44,9 @@ func parseConfig(raw map[string]interface{}) (parsed config, err error) {
 
 	if raw["insecure"] != nil {
 		parsed.IgnoreCert = raw["insecure"].(bool)
+		if parsed.IgnoreCert {
+			logger.Warn("Ignoring SSL certificates")
+		}
 	}
 
 	if raw["batchsize"] != nil {
