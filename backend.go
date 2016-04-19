@@ -71,9 +71,9 @@ func (b *backend) Init() {
 	b.encoderPool = make(chan chan *Message, b.workers)
 	b.senderPool = make(chan chan *Message, b.workers)
 
-	b.messages = make(chan *Message, b.queue)
+	b.messages = make(chan *Message)
 	b.input = make(chan *Message)
-	b.reports = make(chan *Message, b.queue)
+	b.reports = make(chan *Message)
 	b.messagePool = make(chan *Message, b.queue)
 
 	b.keepSending = make(chan struct{})
