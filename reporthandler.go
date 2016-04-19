@@ -116,9 +116,7 @@ func (r *reportHandler) Init() {
 							Warnf("Retrying message")
 
 						<-time.After(time.Duration(r.config.backoff) * time.Second)
-						if err := message.Produce(); err != nil {
-							logger.Error(err)
-						}
+						message.backend.input <- message
 					}()
 				}
 			}
