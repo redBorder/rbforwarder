@@ -78,7 +78,6 @@ func (r *reportHandler) Init() {
 					report.Metadata = message.Metadata
 
 					// Reset message data
-					message.InputBuffer.Reset()
 					message.OutputBuffer.Reset()
 					message.Data = nil
 					message.Metadata = make(map[string]interface{})
