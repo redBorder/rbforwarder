@@ -9,7 +9,7 @@ import (
 )
 
 // Version is the current tag
-var Version = "0.4-beta"
+var Version = "0.4-beta2"
 
 // Logger for the package
 var logger *logrus.Entry
