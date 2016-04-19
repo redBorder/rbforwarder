@@ -85,26 +85,10 @@ func (r *reportHandler) Init() {
 					message.report = Report{}
 
 					// Send back the message to the pool
-				returnReportLoop:
-					for {
-						select {
-						case r.freedMessages <- message:
-							break returnReportLoop
-						case <-time.After(1 * time.Second):
-							logger.Warn("Can't put back the message on the pool")
-						}
-					}
+					r.freedMessages <- message
 
 					// Send the report to the client
-				sendReportLoop:
-					for {
-						select {
-						case r.unordered <- report:
-							break sendReportLoop
-						case <-time.After(500 * time.Millisecond):
-							logger.Warn("Delivering report: Full queue")
-						}
-					}
+					r.unordered <- report
 				} else {
 					go func() {
 						message.report.Retries++
