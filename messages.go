@@ -24,23 +24,18 @@ type Message struct {
 
 // Produce is used by the source to send messages to the backend
 func (m *Message) Produce() error {
-
 	backend := m.backend
 
-	// This is no a retry
-	if m.report.Retries == 0 {
-		m.report = Report{
-			ID:       atomic.AddUint64(&m.backend.currentProducedID, 1) - 1,
-			Metadata: m.Metadata,
-		}
-	}
-
-	// Send the message to the backend
-	if backend.active {
-		backend.input <- m
-	} else {
+	if !backend.active {
 		return errors.New("Backend closed")
 	}
+
+	m.report = Report{
+		ID:       atomic.AddUint64(&m.backend.currentProducedID, 1) - 1,
+		Metadata: m.Metadata,
+	}
+
+	backend.input <- m
 
 	return nil
 }

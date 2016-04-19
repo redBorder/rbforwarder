@@ -156,5 +156,6 @@ func (f *RBForwarder) TakeMessage() (message *Message, err error) {
 	if !ok {
 		err = errors.New("Pool closed")
 	}
+
 	return
 }
