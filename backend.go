@@ -130,9 +130,7 @@ func (b *backend) Init() {
 					logger.Warn("Error on produce: Full queue")
 				}
 			case <-time.After(1 * time.Second):
-				if err := m.Report(-1, "Error on produce: No workers available"); err != nil {
-					logger.Warn(err)
-				}
+				m.Report(-1, "Error on produce: No workers available")
 			}
 		}
 	}()

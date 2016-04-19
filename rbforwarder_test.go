@@ -26,9 +26,7 @@ func (tsender *TestSender) Send(m *Message) error {
 
 	select {
 	case tsender.channel <- string(m.OutputBuffer.Bytes()):
-		if err := m.Report(0, "OK"); err != nil {
-			log.Fatal(err)
-		}
+		m.Report(0, "OK")
 	}
 	return nil
 }

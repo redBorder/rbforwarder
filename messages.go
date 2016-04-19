@@ -46,14 +46,17 @@ func (m *Message) Produce() error {
 }
 
 // Report is used by the sender to inform that a message has not been sent
-func (m *Message) Report(statusCode int, status string) error {
+func (m *Message) Report(statusCode int, status string) {
 	m.report.StatusCode = statusCode
 	m.report.Status = status
-	select {
-	case m.backend.reports <- m:
-	case <-time.After(1 * time.Second):
-		return errors.New("Error on report: Full queue")
-	}
 
-	return nil
+forLoop:
+	for {
+		select {
+		case m.backend.reports <- m:
+			break forLoop
+		case <-time.After(500 * time.Second):
+			logger.Warn("Retrying report report: Full queue")
+		}
+	}
 }
