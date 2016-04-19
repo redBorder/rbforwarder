@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"sync/atomic"
-	"time"
 )
 
 const (
@@ -44,14 +43,5 @@ func (m *Message) Produce() error {
 func (m *Message) Report(statusCode int, status string) {
 	m.report.StatusCode = statusCode
 	m.report.Status = status
-
-forLoop:
-	for {
-		select {
-		case m.backend.reports <- m:
-			break forLoop
-		case <-time.After(500 * time.Second):
-			logger.Warn("Retrying report report: Full queue")
-		}
-	}
+	m.backend.reports <- m
 }
