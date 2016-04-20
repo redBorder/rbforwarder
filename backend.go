@@ -127,7 +127,7 @@ func (b *backend) Init() {
 					b.currentMessages++
 					b.currentBytes += uint64(m.InputBuffer.Len())
 				case <-time.After(1 * time.Second):
-					logger.Warn("Error on produce: Full queue")
+					Logger.Warn("Error on produce: Full queue")
 				}
 			case <-time.After(1 * time.Second):
 				m.Report(-1, "Error on produce: No workers available")
@@ -137,6 +137,7 @@ func (b *backend) Init() {
 	<-done
 
 	b.active = true
+	Logger.Debug("Backend ready")
 }
 
 // Worker that decodes the received message
@@ -232,7 +233,7 @@ func (b *backend) startEncoder(i int) {
 // Worker that sends the message
 func (b *backend) startSender(i int) {
 	if b.senderHelper == nil {
-		logger.Fatal("No sender provided")
+		Logger.Fatal("No sender provided")
 	}
 
 	sender := b.senderHelper.CreateSender()

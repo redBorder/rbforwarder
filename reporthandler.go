@@ -91,7 +91,7 @@ func (r *reportHandler) Init() {
 				} else {
 					go func() {
 						message.report.Retries++
-						logger.
+						Logger.
 							WithField("ID", message.report.ID).
 							WithField("Retry", message.report.Retries).
 							WithField("Status", message.report.Status).
@@ -106,6 +106,8 @@ func (r *reportHandler) Init() {
 		}
 		close(r.unordered)
 	}()
+
+	Logger.Debug("Report Handler ready")
 }
 
 func (r *reportHandler) GetReports() chan Report {
