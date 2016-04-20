@@ -2,7 +2,6 @@ package rbforwarder
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"testing"
 	"time"
@@ -56,7 +55,7 @@ func TestBackend(t *testing.T) {
 				select {
 				case reportChannel <- report:
 				default:
-					log.Fatal("Can't send report to report channel")
+					Printf("Can't send report to report channel")
 				}
 			}
 		}()
@@ -68,11 +67,11 @@ func TestBackend(t *testing.T) {
 
 			message, err := rbforwarder.TakeMessage()
 			if err != nil {
-				log.Fatal(err)
+				Printf(err.Error())
 			}
 			message.InputBuffer.WriteString("Hola mundo")
 			if err := message.Produce(); err != nil {
-				log.Fatal(err)
+				Printf(err.Error())
 			}
 
 			Convey("A \"Hello World\" message should be sent", func() {
@@ -106,18 +105,18 @@ func TestBackend2(t *testing.T) {
 					select {
 					case reportChannel <- report:
 					default:
-						log.Fatal("Can't send report to report channel")
+						Printf("Can't send report to report channel")
 					}
 				}
 			}()
 
 			message, err := rbforwarder.TakeMessage()
 			if err != nil {
-				log.Fatal(err)
+				Printf(err.Error())
 			}
 			message.InputBuffer.WriteString("Hola mundo")
 			if err := message.Produce(); err != nil {
-				log.Fatal(err)
+				Printf(err.Error())
 			}
 
 			Convey("A report of the sent message should be received", func() {
@@ -155,7 +154,7 @@ func TestBackend3(t *testing.T) {
 					select {
 					case reportChannel <- report:
 					default:
-						log.Fatal("Can't send report to report channel")
+						Printf("Can't send report to report channel")
 					}
 				}
 			}()
@@ -163,11 +162,11 @@ func TestBackend3(t *testing.T) {
 			for i := 0; i < 100; i++ {
 				message, err := rbforwarder.TakeMessage()
 				if err != nil {
-					log.Fatal(err)
+					Printf(err.Error())
 				}
 				message.InputBuffer.WriteString("Message")
 				if err := message.Produce(); err != nil {
-					log.Fatal(err)
+					Printf(err.Error())
 				}
 
 				go func() {
