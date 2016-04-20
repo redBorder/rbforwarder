@@ -78,33 +78,16 @@ func (r *reportHandler) Init() {
 					report.Metadata = message.Metadata
 
 					// Reset message data
-					message.InputBuffer.Reset()
 					message.OutputBuffer.Reset()
 					message.Data = nil
 					message.Metadata = make(map[string]interface{})
 					message.report = Report{}
 
 					// Send back the message to the pool
-				returnReportLoop:
-					for {
-						select {
-						case r.freedMessages <- message:
-							break returnReportLoop
-						case <-time.After(1 * time.Second):
-							logger.Warn("Can't put back the message on the pool")
-						}
-					}
+					r.freedMessages <- message
 
 					// Send the report to the client
-				sendReportLoop:
-					for {
-						select {
-						case r.unordered <- report:
-							break sendReportLoop
-						case <-time.After(500 * time.Millisecond):
-							logger.Warn("Delivering report: Full queue")
-						}
-					}
+					r.unordered <- report
 				} else {
 					go func() {
 						message.report.Retries++
@@ -116,9 +99,7 @@ func (r *reportHandler) Init() {
 							Warnf("Retrying message")
 
 						<-time.After(time.Duration(r.config.backoff) * time.Second)
-						if err := message.Produce(); err != nil {
-							logger.Error(err)
-						}
+						message.backend.input <- message
 					}()
 				}
 			}
