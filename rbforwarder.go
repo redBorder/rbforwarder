@@ -9,10 +9,12 @@ import (
 )
 
 // Version is the current tag
-var Version = "0.4-beta2"
+var Version = "0.4-beta3"
+
+var log = logrus.New()
 
 // Logger for the package
-var logger *logrus.Entry
+var Logger = logrus.NewEntry(log)
 
 //------------------------------------------------------------------------------
 // RBForwarder
@@ -27,7 +29,6 @@ type Config struct {
 	MaxMessages int
 	MaxBytes    int
 	ShowCounter int
-	Debug       bool
 }
 
 // RBForwarder is the main objecto of the package. It has the main methods for
@@ -44,12 +45,6 @@ type RBForwarder struct {
 
 // NewRBForwarder creates a new Forwarder object
 func NewRBForwarder(config Config) *RBForwarder {
-	if config.Debug {
-		LogLevel(logrus.DebugLevel)
-	}
-
-	logger = NewLogger("backend")
-
 	backend := &backend{
 		workers:     config.Workers,
 		queue:       config.QueueSize,
@@ -67,10 +62,13 @@ func NewRBForwarder(config Config) *RBForwarder {
 	fields := logrus.Fields{
 		"workers":      config.Workers,
 		"retries":      config.Retries,
+		"backoff_time": config.Backoff,
 		"queue_size":   config.QueueSize,
 		"max_messages": config.MaxMessages,
+		"max_bytes":    config.MaxBytes,
 	}
-	logger.WithFields(fields).Info("Initialized rB Forwarder")
+
+	Logger.WithFields(fields).Debug("Initialized rB Forwarder")
 
 	return forwarder
 }
@@ -80,11 +78,9 @@ func (f *RBForwarder) Start() {
 
 	// Start the backend
 	f.backend.Init()
-	logger.Info("Backend ready")
 
 	// Start the report handler
 	f.reportHandler.Init()
-	logger.Info("Reporter ready")
 
 	if f.config.ShowCounter > 0 {
 		go func() {
@@ -94,7 +90,7 @@ func (f *RBForwarder) Start() {
 				)
 				<-timer.C
 				if f.counter > 0 {
-					logger.Infof(
+					Logger.Infof(
 						"Messages per second %d",
 						f.counter/uint64(f.config.ShowCounter),
 					)

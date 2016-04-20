@@ -20,8 +20,6 @@ const (
 	errHTTP    = 103
 )
 
-var logger *logrus.Entry
-
 // Sender receives data from pipe and send it via HTTP to an endpoint
 type Sender struct {
 	id          int
@@ -33,6 +31,7 @@ type Sender struct {
 	timer   *time.Timer
 
 	// Configuration
+	logger *logrus.Entry
 	config config
 }
 
@@ -75,7 +74,7 @@ func (s *Sender) Init(id int) error {
 			for {
 				timer := time.NewTimer(time.Duration(s.config.ShowCounter) * time.Second)
 				<-timer.C
-				logger.WithField("worker", s.id).Infof("Messages per second %d", s.counter/int64(s.config.ShowCounter))
+				s.logger.WithField("worker", s.id).Infof("Messages per second %d", s.counter/int64(s.config.ShowCounter))
 				s.counter = 0
 			}
 		}()
@@ -137,7 +136,7 @@ func (s *Sender) Send(message *rbforwarder.Message) error {
 	// Write the new message to the buffer and increase the number of messages in
 	// the buffer
 	if _, err := batchBuffer.writer.Write(message.OutputBuffer.Bytes()); err != nil {
-		logger.Error(err)
+		s.logger.Error(err)
 	}
 	batchBuffer.messages = append(batchBuffer.messages, message)
 	batchBuffer.messageCount++
@@ -188,7 +187,7 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	// Create the HTTP POST request
 	req, err := http.NewRequest("POST", s.config.URL+"/"+path, batchBuffer.buff)
 	if err != nil {
-		logger.Errorf("Error creating request: %s", err.Error())
+		s.logger.Errorf("Error creating request: %s", err.Error())
 		for _, message := range batchBuffer.messages {
 			message.Report(errRequest, err.Error())
 		}

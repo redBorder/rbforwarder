@@ -1,11 +1,16 @@
 package httpsender
 
 import (
-	"log"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/redBorder/rbforwarder"
 )
+
+var log = logrus.New()
+
+// Logger for the package
+var Logger = logrus.NewEntry(log)
 
 // Helper is used to create instances of HTTP senders
 type Helper struct {
@@ -14,7 +19,6 @@ type Helper struct {
 
 // NewHelper creates a new sender helper
 func NewHelper(rawConfig map[string]interface{}) Helper {
-	logger = rbforwarder.NewLogger("sender")
 	parsedConfig, _ := parseConfig(rawConfig)
 
 	return Helper{
@@ -26,6 +30,7 @@ func NewHelper(rawConfig map[string]interface{}) Helper {
 func (s Helper) CreateSender() rbforwarder.Sender {
 	httpSender := new(Sender)
 	httpSender.config = s.config
+	httpSender.logger = Logger.WithField("prefix", "sender")
 
 	return httpSender
 }
@@ -35,7 +40,7 @@ func parseConfig(raw map[string]interface{}) (parsed config, err error) {
 	if raw["url"] != nil {
 		parsed.URL = raw["url"].(string)
 	} else {
-		log.Fatal("No url provided")
+		Logger.Fatal("No url provided")
 	}
 
 	if raw["endpoint"] != nil {
@@ -45,7 +50,7 @@ func parseConfig(raw map[string]interface{}) (parsed config, err error) {
 	if raw["insecure"] != nil {
 		parsed.IgnoreCert = raw["insecure"].(bool)
 		if parsed.IgnoreCert {
-			logger.Warn("Ignoring SSL certificates")
+			Logger.Warn("Ignoring SSL certificates")
 		}
 	}
 
