@@ -23,7 +23,6 @@ type reportHandlerConfig struct {
 // of the produced message using GetReports() or GetOrderedReports()
 type reportHandler struct {
 	in            chan *Message     // Used to receive messages
-	retries       chan *Message     // Used to send messages if status code is not 0
 	freedMessages chan *Message     // Used to send messages messages after its report has been delivered
 	unordered     chan Report       // Used to send reports out of order
 	out           chan Report       // Used to send reports in order
@@ -38,7 +37,6 @@ type reportHandler struct {
 func newReportHandler(maxRetries, backoff, queue int) *reportHandler {
 	return &reportHandler{
 		in:            make(chan *Message, queue),
-		retries:       make(chan *Message, queue),
 		freedMessages: make(chan *Message, queue),
 		unordered:     make(chan Report, queue),
 		out:           make(chan Report, queue),
