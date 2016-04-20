@@ -125,7 +125,7 @@ func (b *backend) Init() {
 				select {
 				case messageChannel <- m:
 					b.currentMessages++
-					b.currentBytes += uint64(m.OutputBuffer.Len())
+					b.currentBytes += uint64(m.InputBuffer.Len())
 				case <-time.After(1 * time.Second):
 					logger.Warn("Error on produce: Full queue")
 				}
