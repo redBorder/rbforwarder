@@ -190,9 +190,7 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	if err != nil {
 		logger.Errorf("Error creating request: %s", err.Error())
 		for _, message := range batchBuffer.messages {
-			if err := message.Report(errRequest, err.Error()); err != nil {
-				logger.Error(err)
-			}
+			message.Report(errRequest, err.Error())
 		}
 		return
 	}
@@ -206,9 +204,7 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	res, err := s.client.Do(req)
 	if err != nil {
 		for _, message := range batchBuffer.messages {
-			if err := message.Report(errHTTP, err.Error()); err != nil {
-				logger.Error(err)
-			}
+			message.Report(errHTTP, err.Error())
 		}
 		return
 	}
@@ -217,15 +213,11 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	// Send the reports
 	if res.StatusCode >= 400 {
 		for _, message := range batchBuffer.messages {
-			if err := message.Report(errStatus, res.Status); err != nil {
-				logger.Error(err)
-			}
+			message.Report(errStatus, res.Status)
 		}
 	} else {
 		for _, message := range batchBuffer.messages {
-			if err := message.Report(0, res.Status); err != nil {
-				logger.Error(err)
-			}
+			message.Report(0, res.Status)
 		}
 	}
 

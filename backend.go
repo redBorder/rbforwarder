@@ -71,9 +71,9 @@ func (b *backend) Init() {
 	b.encoderPool = make(chan chan *Message, b.workers)
 	b.senderPool = make(chan chan *Message, b.workers)
 
-	b.messages = make(chan *Message, b.queue)
+	b.messages = make(chan *Message)
 	b.input = make(chan *Message)
-	b.reports = make(chan *Message, b.queue)
+	b.reports = make(chan *Message)
 	b.messagePool = make(chan *Message, b.queue)
 
 	b.keepSending = make(chan struct{})
@@ -130,9 +130,7 @@ func (b *backend) Init() {
 					logger.Warn("Error on produce: Full queue")
 				}
 			case <-time.After(1 * time.Second):
-				if err := m.Report(-1, "Error on produce: No workers available"); err != nil {
-					logger.Warn(err)
-				}
+				m.Report(-1, "Error on produce: No workers available")
 			}
 		}
 	}()

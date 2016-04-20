@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"sync/atomic"
-	"time"
 )
 
 const (
@@ -24,36 +23,25 @@ type Message struct {
 
 // Produce is used by the source to send messages to the backend
 func (m *Message) Produce() error {
-
 	backend := m.backend
 
-	// This is no a retry
-	if m.report.Retries == 0 {
-		m.report = Report{
-			ID:       atomic.AddUint64(&m.backend.currentProducedID, 1) - 1,
-			Metadata: m.Metadata,
-		}
-	}
-
-	// Send the message to the backend
-	if backend.active {
-		backend.input <- m
-	} else {
+	if !backend.active {
 		return errors.New("Backend closed")
 	}
+
+	m.report = Report{
+		ID:       atomic.AddUint64(&m.backend.currentProducedID, 1) - 1,
+		Metadata: m.Metadata,
+	}
+
+	backend.input <- m
 
 	return nil
 }
 
 // Report is used by the sender to inform that a message has not been sent
-func (m *Message) Report(statusCode int, status string) error {
+func (m *Message) Report(statusCode int, status string) {
 	m.report.StatusCode = statusCode
 	m.report.Status = status
-	select {
-	case m.backend.reports <- m:
-	case <-time.After(1 * time.Second):
-		return errors.New("Error on report: Full queue")
-	}
-
-	return nil
+	m.backend.reports <- m
 }
