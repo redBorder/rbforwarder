@@ -25,8 +25,8 @@ type Encoder interface {
 
 // Sender takes a raw buffer and sent it using a network protocol
 type Sender interface {
-	Init(int) error
-	Send(*Message) error
+	Init(int, chan *Message) error
+	OnMessage(*Message) error
 }
 
 // SenderHelper is used to create Senders instances
@@ -83,8 +83,6 @@ func (b *backend) Init() {
 			Metadata:     make(map[string]interface{}),
 			InputBuffer:  new(bytes.Buffer),
 			OutputBuffer: new(bytes.Buffer),
-
-			backend: b,
 		}
 	}
 
@@ -130,7 +128,9 @@ func (b *backend) Init() {
 					Logger.Warn("Error on produce: Full queue")
 				}
 			case <-time.After(1 * time.Second):
-				m.Report(-1, "Error on produce: No workers available")
+				m.Report.StatusCode = -1
+				m.Report.Status = "Error on produce: No workers available"
+				b.reports <- m
 			}
 		}
 	}()
@@ -237,7 +237,7 @@ func (b *backend) startSender(i int) {
 	}
 
 	sender := b.senderHelper.CreateSender()
-	sender.Init(i)
+	sender.Init(i, b.reports)
 
 	workerChannel := make(chan *Message)
 
@@ -245,7 +245,7 @@ func (b *backend) startSender(i int) {
 		for {
 			b.senderPool <- workerChannel
 			message := <-workerChannel
-			sender.Send(message)
+			sender.OnMessage(message)
 		}
 	}()
 }

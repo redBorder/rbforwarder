@@ -11,21 +11,26 @@ import (
 
 type TestSender struct {
 	channel chan string
+	reports chan *Message
 }
+
 type TestSenderHelper struct {
 	channel chan string
 }
 
-func (tsender *TestSender) Init(id int) error {
+func (tsender *TestSender) Init(id int, reports chan *Message) error {
+	tsender.reports = reports
 	return nil
 }
 
-func (tsender *TestSender) Send(m *Message) error {
+func (tsender *TestSender) OnMessage(m *Message) error {
 	time.Sleep((time.Millisecond * 10) * time.Duration(rand.Int31n(50)))
 
 	select {
 	case tsender.channel <- string(m.OutputBuffer.Bytes()):
-		m.Report(0, "OK")
+		m.Report.StatusCode = 0
+		m.Report.Status = "OK"
+		tsender.reports <- m
 	}
 	return nil
 }
@@ -64,13 +69,7 @@ func TestBackend(t *testing.T) {
 		rbforwarder.Start()
 
 		Convey("When a \"Hello World\" message is received", func() {
-
-			message, err := rbforwarder.TakeMessage()
-			if err != nil {
-				Printf(err.Error())
-			}
-			message.InputBuffer.WriteString("Hola mundo")
-			if err := message.Produce(); err != nil {
+			if err := rbforwarder.Produce([]byte("Hola mundo")); err != nil {
 				Printf(err.Error())
 			}
 
@@ -110,12 +109,7 @@ func TestBackend2(t *testing.T) {
 				}
 			}()
 
-			message, err := rbforwarder.TakeMessage()
-			if err != nil {
-				Printf(err.Error())
-			}
-			message.InputBuffer.WriteString("Hola mundo")
-			if err := message.Produce(); err != nil {
+			if err := rbforwarder.Produce([]byte("Hola mundo")); err != nil {
 				Printf(err.Error())
 			}
 
@@ -160,12 +154,7 @@ func TestBackend3(t *testing.T) {
 			}()
 
 			for i := 0; i < 100; i++ {
-				message, err := rbforwarder.TakeMessage()
-				if err != nil {
-					Printf(err.Error())
-				}
-				message.InputBuffer.WriteString("Message")
-				if err := message.Produce(); err != nil {
+				if err := rbforwarder.Produce([]byte("Message")); err != nil {
 					Printf(err.Error())
 				}
 

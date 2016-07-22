@@ -1,7 +1,7 @@
 package rbforwarder
 
 import (
-	"errors"
+	"bytes"
 	"sync/atomic"
 	"time"
 
@@ -53,11 +53,17 @@ func NewRBForwarder(config Config) *RBForwarder {
 	}
 
 	forwarder := &RBForwarder{
-		backend:       backend,
-		reportHandler: newReportHandler(config.Retries, config.Backoff, config.QueueSize),
-		reports:       make(chan Report, config.QueueSize),
-		config:        config,
+		backend: backend,
+		reports: make(chan Report, config.QueueSize),
+		config:  config,
 	}
+
+	forwarder.reportHandler = newReportHandler(
+		config.Retries,
+		config.Backoff,
+		config.QueueSize,
+		backend.input,
+	)
 
 	fields := logrus.Fields{
 		"workers":      config.Workers,
@@ -105,7 +111,7 @@ func (f *RBForwarder) Start() {
 	go func() {
 		done <- struct{}{}
 		for message := range f.backend.reports {
-			if message.report.StatusCode == 0 {
+			if message.Report.StatusCode == 0 {
 				atomic.AddUint64(&f.counter, 1)
 			}
 			f.reportHandler.in <- message
@@ -146,12 +152,18 @@ func (f *RBForwarder) GetOrderedReports() <-chan Report {
 	return f.reportHandler.GetOrderedReports()
 }
 
-// TakeMessage returns a message from the message pool
-func (f *RBForwarder) TakeMessage() (message *Message, err error) {
-	message, ok := <-f.backend.messagePool
-	if !ok {
-		err = errors.New("Pool closed")
+// Produce is used by the source to send messages to the backend
+func (f *RBForwarder) Produce(buf []byte) error {
+	message := <-f.backend.messagePool
+
+	message.InputBuffer = bytes.NewBuffer(buf)
+
+	message.Report = Report{
+		ID:       atomic.AddUint64(&f.backend.currentProducedID, 1) - 1,
+		Metadata: message.Metadata,
 	}
 
-	return
+	f.backend.input <- message
+
+	return nil
 }

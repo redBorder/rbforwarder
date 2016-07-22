@@ -22,22 +22,24 @@ type reportHandlerConfig struct {
 // of the pipeline. The first element of the pipeline can know the status
 // of the produced message using GetReports() or GetOrderedReports()
 type reportHandler struct {
-	in            chan *Message     // Used to receive messages
-	freedMessages chan *Message     // Used to send messages messages after its report has been delivered
-	unordered     chan Report       // Used to send reports out of order
-	out           chan Report       // Used to send reports in order
-	close         chan struct{}     // Used to stop sending reports
-	queued        map[uint64]Report // Used to store pending reports
+	in            chan *Message     // Receive messages
+	freedMessages chan *Message     // Messages after its report has been delivered
+	retry         chan *Message     // Send messages to retry
+	unordered     chan Report       // Send reports out of order
+	out           chan Report       // Send reports in order
+	close         chan struct{}     // Stop sending reports
+	queued        map[uint64]Report // Store pending reports
 	currentReport uint64            // Last delivered report
 
 	config reportHandlerConfig
 }
 
 // newReportHandler creates a new instance of reportHandler
-func newReportHandler(maxRetries, backoff, queue int) *reportHandler {
+func newReportHandler(maxRetries, backoff, queue int, retry chan *Message) *reportHandler {
 	return &reportHandler{
 		in:            make(chan *Message, queue),
 		freedMessages: make(chan *Message, queue),
+		retry:         retry,
 		unordered:     make(chan Report, queue),
 		out:           make(chan Report, queue),
 		close:         make(chan struct{}),
@@ -65,21 +67,20 @@ func (r *reportHandler) Init() {
 				// - Message has been received successfully
 				// - Retrying has been disabled
 				// - The max number of retries has been reached
-				// Retry in the other case
-				if message.report.StatusCode == 0 ||
+				if message.Report.StatusCode == 0 ||
 					r.config.maxRetries == 0 ||
 					(r.config.maxRetries > 0 &&
-						message.report.Retries >= r.config.maxRetries) {
+						message.Report.Retries >= r.config.maxRetries) {
 
 					// Create a copy of the report
-					report := message.report
+					report := message.Report
 					report.Metadata = message.Metadata
 
 					// Reset message data
 					message.OutputBuffer.Reset()
 					message.Data = nil
 					message.Metadata = make(map[string]interface{})
-					message.report = Report{}
+					message.Report = Report{}
 
 					// Send back the message to the pool
 					r.freedMessages <- message
@@ -87,17 +88,18 @@ func (r *reportHandler) Init() {
 					// Send the report to the client
 					r.unordered <- report
 				} else {
+					// Retry in other case
 					go func() {
-						message.report.Retries++
+						message.Report.Retries++
 						Logger.
-							WithField("ID", message.report.ID).
-							WithField("Retry", message.report.Retries).
-							WithField("Status", message.report.Status).
-							WithField("Code", message.report.StatusCode).
+							WithField("ID", message.Report.ID).
+							WithField("Retry", message.Report.Retries).
+							WithField("Status", message.Report.Status).
+							WithField("Code", message.Report.StatusCode).
 							Warnf("Retrying message")
 
 						<-time.After(time.Duration(r.config.backoff) * time.Second)
-						message.backend.input <- message
+						r.retry <- message
 					}()
 				}
 			}

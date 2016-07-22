@@ -25,6 +25,7 @@ type Sender struct {
 	id          int
 	client      *http.Client
 	batchBuffer map[string]*batchBuffer
+	reports     chan *rbforwarder.Message
 
 	// Statistics
 	counter int64
@@ -55,8 +56,9 @@ type config struct {
 }
 
 // Init initializes an HTTP sender
-func (s *Sender) Init(id int) error {
+func (s *Sender) Init(id int, reports chan *rbforwarder.Message) error {
 	s.id = id
+	s.reports = reports
 
 	// Create the client object. Useful for skipping SSL verify
 	tr := &http.Transport{}
@@ -83,9 +85,9 @@ func (s *Sender) Init(id int) error {
 	return nil
 }
 
-// Send stores a message received from the pipeline into a buffer to perform
+// OnMessage stores a message received from the pipeline into a buffer to perform
 // batching.
-func (s *Sender) Send(message *rbforwarder.Message) error {
+func (s *Sender) OnMessage(message *rbforwarder.Message) error {
 
 	// logger.Printf("[%d] Sending message ID: [%d]", s.id, message)
 
@@ -189,7 +191,9 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	if err != nil {
 		s.logger.Errorf("Error creating request: %s", err.Error())
 		for _, message := range batchBuffer.messages {
-			message.Report(errRequest, err.Error())
+			message.Report.StatusCode = errRequest
+			message.Report.Status = err.Error()
+			s.reports <- message
 		}
 		return
 	}
@@ -203,7 +207,9 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	res, err := s.client.Do(req)
 	if err != nil {
 		for _, message := range batchBuffer.messages {
-			message.Report(errHTTP, err.Error())
+			message.Report.StatusCode = errHTTP
+			message.Report.Status = err.Error()
+			s.reports <- message
 		}
 		return
 	}
@@ -212,11 +218,15 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	// Send the reports
 	if res.StatusCode >= 400 {
 		for _, message := range batchBuffer.messages {
-			message.Report(errStatus, res.Status)
+			message.Report.StatusCode = errStatus
+			message.Report.Status = res.Status
+			s.reports <- message
 		}
 	} else {
 		for _, message := range batchBuffer.messages {
-			message.Report(0, res.Status)
+			message.Report.StatusCode = 0
+			message.Report.Status = res.Status
+			s.reports <- message
 		}
 	}
 
