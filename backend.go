@@ -2,7 +2,6 @@ package rbforwarder
 
 import (
 	"bytes"
-	"time"
 
 	"github.com/redBorder/rbforwarder/pipeline"
 )
@@ -21,25 +20,17 @@ type Backend struct {
 	reports     chan *pipeline.Message
 	messagePool chan *pipeline.Message
 
-	workers     int
-	queueSize   int
-	maxMessages int
-	maxBytes    int
+	workers   int
+	queueSize int
 
 	active bool
-
-	currentMessages uint64
-	currentBytes    uint64
-	keepSending     chan struct{}
 }
 
 // NewBackend creates a new Backend
 func NewBackend(workers, queueSize, maxMessages, maxBytes int) *Backend {
 	b := &Backend{
-		workers:     workers,
-		queueSize:   queueSize,
-		maxMessages: maxMessages,
-		maxBytes:    maxBytes,
+		workers:   workers,
+		queueSize: queueSize,
 	}
 
 	b.senderPool = make(chan chan *pipeline.Message, b.workers)
@@ -48,8 +39,6 @@ func NewBackend(workers, queueSize, maxMessages, maxBytes int) *Backend {
 	b.input = make(chan *pipeline.Message)
 	b.reports = make(chan *pipeline.Message)
 	b.messagePool = make(chan *pipeline.Message, b.queueSize)
-
-	b.keepSending = make(chan struct{})
 
 	for i := 0; i < b.queueSize; i++ {
 		b.messagePool <- &pipeline.Message{
@@ -68,45 +57,13 @@ func (b *Backend) Init() {
 		b.startSender(i)
 	}
 
-	// Limit the messages/bytes per second
-	go func() {
-		for {
-			timer := time.NewTimer(1 * time.Second)
-			<-timer.C
-			b.keepSending <- struct{}{}
-		}
-	}()
-
-	// Get messages from produces
+	// Get messages from produces and send them to workers
 	done := make(chan struct{})
 	go func() {
 		done <- struct{}{}
 		for m := range b.input {
-
-			// Wait if the limit has ben reached
-			if b.maxMessages > 0 && b.currentMessages >= uint64(b.maxMessages) {
-				<-b.keepSending
-				b.currentMessages = 0
-			} else if b.maxBytes > 0 && b.currentBytes >= uint64(b.maxBytes) {
-				<-b.keepSending
-				b.currentBytes = 0
-			}
-
-			// Send to workers
-			select {
-			case messageChannel := <-b.senderPool:
-				select {
-				case messageChannel <- m:
-					b.currentMessages++
-					b.currentBytes += uint64(m.InputBuffer.Len())
-				case <-time.After(1 * time.Second):
-					Logger.Warn("Error on produce: Full queue")
-				}
-			case <-time.After(1 * time.Second):
-				m.Report.StatusCode = -1
-				m.Report.Status = "Error on produce: No workers available"
-				b.reports <- m
-			}
+			messageChannel := <-b.senderPool
+			messageChannel <- m
 		}
 	}()
 	<-done

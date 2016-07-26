@@ -144,9 +144,11 @@ func TestBackend(t *testing.T) {
 				})).Return(nil)
 
 				report := <-rbforwarder.GetReports()
+
 				So(report.Metadata["message_id"], ShouldEqual, "test123")
 				So(report.StatusCode, ShouldEqual, 0)
 				So(report.Status, ShouldEqual, "OK")
+
 				sender.AssertExpectations(t)
 			})
 		})
@@ -167,10 +169,12 @@ func TestBackend(t *testing.T) {
 				})).Return(nil)
 
 				report := <-rbforwarder.GetOrderedReports()
+
 				So(report.Metadata["message_id"], ShouldEqual, "test123")
 				So(report.Status, ShouldEqual, "Fake Error")
 				So(report.StatusCode, ShouldEqual, 99)
 				So(report.Retries, ShouldEqual, numRetries)
+
 				sender.AssertExpectations(t)
 			})
 		})
