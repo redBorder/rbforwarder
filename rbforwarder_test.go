@@ -75,8 +75,6 @@ func TestBackend(t *testing.T) {
 				}
 
 				So(i, ShouldEqual, numMessages)
-
-				sender.AssertExpectations(t)
 			})
 
 			Convey("10000 reports should be received", func() {
@@ -88,8 +86,6 @@ func TestBackend(t *testing.T) {
 				}
 
 				So(i, ShouldEqual, numMessages)
-
-				sender.AssertExpectations(t)
 			})
 
 			Convey("10000 reports should be received in order", func() {
@@ -108,8 +104,6 @@ func TestBackend(t *testing.T) {
 
 				So(err, ShouldBeNil)
 				So(i, ShouldEqual, numMessages)
-
-				sender.AssertExpectations(t)
 			})
 		})
 
