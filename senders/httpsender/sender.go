@@ -105,8 +105,8 @@ func (s *Sender) OnMessage(message *pipeline.Message) error {
 	// We can send batch only for messages with the same path
 	var path string
 
-	if message.Metadata[s.config.Endpoint] != nil {
-		path = message.Metadata[s.config.Endpoint].(string)
+	if message.Report.Metadata[s.config.Endpoint] != nil {
+		path = message.Report.Metadata[s.config.Endpoint].(string)
 	}
 
 	// Initialize buffer for path

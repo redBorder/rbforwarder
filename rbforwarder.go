@@ -91,7 +91,6 @@ func (f *RBForwarder) Start() {
 
 // Close stop pending actions
 func (f *RBForwarder) Close() {
-	f.backend.active = false
 	f.reportHandler.close <- struct{}{}
 }
 
@@ -117,11 +116,10 @@ func (f *RBForwarder) Produce(buf []byte, options map[string]interface{}) error 
 	message := <-f.backend.messagePool
 
 	message.InputBuffer = bytes.NewBuffer(buf)
-	message.Metadata = options
 
 	message.Report = pipeline.Report{
 		ID:       atomic.AddUint64(&f.backend.currentProducedID, 1) - 1,
-		Metadata: message.Metadata,
+		Metadata: options,
 	}
 
 	f.backend.input <- message

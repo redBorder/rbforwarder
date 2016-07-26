@@ -10,7 +10,6 @@ import (
 type Backend struct {
 	sender pipeline.Sender
 
-	// Pool of workers
 	senderPool chan chan *pipeline.Message
 
 	currentProducedID uint64
@@ -22,8 +21,6 @@ type Backend struct {
 
 	workers   int
 	queueSize int
-
-	active bool
 }
 
 // NewBackend creates a new Backend
@@ -42,7 +39,6 @@ func NewBackend(workers, queueSize, maxMessages, maxBytes int) *Backend {
 
 	for i := 0; i < b.queueSize; i++ {
 		b.messagePool <- &pipeline.Message{
-			Metadata:     make(map[string]interface{}),
 			InputBuffer:  new(bytes.Buffer),
 			OutputBuffer: new(bytes.Buffer),
 		}
@@ -68,7 +64,6 @@ func (b *Backend) Init() {
 	}()
 	<-done
 
-	b.active = true
 	Logger.Debug("Backend ready")
 }
 

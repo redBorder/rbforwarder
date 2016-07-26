@@ -140,7 +140,7 @@ func TestBackend(t *testing.T) {
 
 			Convey("\"Hello World\" message should be get by the worker", func() {
 				sender.On("OnMessage", mock.MatchedBy(func(m *pipeline.Message) bool {
-					return m.Metadata["message_id"] == "test123"
+					return m.Report.Metadata["message_id"] == "test123"
 				})).Return(nil)
 
 				report := <-rbforwarder.GetReports()
@@ -165,7 +165,7 @@ func TestBackend(t *testing.T) {
 
 			Convey("The message should be retried", func() {
 				sender.On("OnMessage", mock.MatchedBy(func(m *pipeline.Message) bool {
-					return m.Metadata["message_id"] == "test123"
+					return m.Report.Metadata["message_id"] == "test123"
 				})).Return(nil)
 
 				report := <-rbforwarder.GetOrderedReports()

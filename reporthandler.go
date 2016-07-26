@@ -68,12 +68,10 @@ func (r *reportHandler) Init() {
 
 					// Create a copy of the report
 					report := message.Report
-					report.Metadata = message.Metadata
 
 					// Reset message data
 					message.OutputBuffer.Reset()
 					message.Data = nil
-					message.Metadata = make(map[string]interface{})
 					message.Report = pipeline.Report{}
 
 					// Send back the message to the pool
