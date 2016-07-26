@@ -12,8 +12,12 @@ import (
 
 type MockSender struct {
 	mock.Mock
+
 	channel chan string
 	reports chan *pipeline.Message
+
+	status     string
+	statusCode int
 }
 
 func (s *MockSender) Init(id int, reports chan *pipeline.Message) error {
@@ -24,6 +28,9 @@ func (s *MockSender) Init(id int, reports chan *pipeline.Message) error {
 
 func (s *MockSender) OnMessage(m *pipeline.Message) error {
 	s.channel <- string(m.InputBuffer.Bytes())
+
+	m.Report.StatusCode = s.statusCode
+	m.Report.Status = s.status
 	s.reports <- m
 
 	args := s.Called(m)
@@ -35,13 +42,14 @@ func TestBackend(t *testing.T) {
 	Convey("Given a working pipeline", t, func() {
 		numMessages := 10000
 		numWorkers := 10
+		numRetries := 3
 
 		sender := &MockSender{
 			channel: make(chan string, 10000),
 		}
 
 		rbforwarder := NewRBForwarder(Config{
-			Retries:   0,
+			Retries:   numRetries,
 			Workers:   numWorkers,
 			QueueSize: numMessages,
 		})
@@ -121,6 +129,9 @@ func TestBackend(t *testing.T) {
 		})
 
 		Convey("When a \"Hello World\" message is produced", func() {
+			sender.status = "OK"
+			sender.statusCode = 0
+
 			if err := rbforwarder.Produce([]byte("Hello World"), map[string]interface{}{
 				"message_id": "test123",
 			}); err != nil {
@@ -134,6 +145,32 @@ func TestBackend(t *testing.T) {
 
 				report := <-rbforwarder.GetReports()
 				So(report.Metadata["message_id"], ShouldEqual, "test123")
+				So(report.StatusCode, ShouldEqual, 0)
+				So(report.Status, ShouldEqual, "OK")
+				sender.AssertExpectations(t)
+			})
+		})
+
+		Convey("When a message fails to send", func() {
+			sender.status = "Fake Error"
+			sender.statusCode = 99
+
+			if err := rbforwarder.Produce([]byte("Hello World"), map[string]interface{}{
+				"message_id": "test123",
+			}); err != nil {
+				Printf(err.Error())
+			}
+
+			Convey("The message should be retried", func() {
+				sender.On("OnMessage", mock.MatchedBy(func(m *pipeline.Message) bool {
+					return m.Metadata["message_id"] == "test123"
+				})).Return(nil)
+
+				report := <-rbforwarder.GetOrderedReports()
+				So(report.Metadata["message_id"], ShouldEqual, "test123")
+				So(report.Status, ShouldEqual, "Fake Error")
+				So(report.StatusCode, ShouldEqual, 99)
+				So(report.Retries, ShouldEqual, numRetries)
 				sender.AssertExpectations(t)
 			})
 		})
