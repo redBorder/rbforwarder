@@ -41,7 +41,7 @@ func TestBackend(t *testing.T) {
 		}
 
 		rbforwarder := NewRBForwarder(Config{
-			Retries:   1,
+			Retries:   0,
 			Workers:   numWorkers,
 			QueueSize: numMessages,
 		})
@@ -75,6 +75,15 @@ func TestBackend(t *testing.T) {
 				}
 
 				So(i, ShouldEqual, numMessages)
+
+				i = 0
+				for range rbforwarder.GetReports() {
+					if i++; i >= numMessages {
+						break
+					}
+				}
+
+				sender.AssertExpectations(t)
 			})
 
 			Convey("10000 reports should be received", func() {
@@ -86,6 +95,8 @@ func TestBackend(t *testing.T) {
 				}
 
 				So(i, ShouldEqual, numMessages)
+
+				sender.AssertExpectations(t)
 			})
 
 			Convey("10000 reports should be received in order", func() {
@@ -104,6 +115,8 @@ func TestBackend(t *testing.T) {
 
 				So(err, ShouldBeNil)
 				So(i, ShouldEqual, numMessages)
+
+				sender.AssertExpectations(t)
 			})
 		})
 

@@ -36,7 +36,6 @@ func newReportHandler(maxRetries, backoff, queueSize int, retry chan *pipeline.M
 		freedMessages: make(chan *pipeline.Message, queueSize),
 		retry:         retry,
 		unordered:     make(chan pipeline.Report, queueSize),
-		out:           make(chan pipeline.Report, queueSize),
 		close:         make(chan struct{}),
 		queued:        make(map[uint64]pipeline.Report),
 		config: reportHandlerConfig{
@@ -107,28 +106,31 @@ func (r *reportHandler) Init() {
 
 func (r *reportHandler) GetReports() chan pipeline.Report {
 	done := make(chan struct{})
+	results := make(chan pipeline.Report)
 
 	go func() {
 		done <- struct{}{}
 
 		for report := range r.unordered {
-			r.out <- report
+			results <- report
 		}
-		close(r.out)
+		close(results)
 	}()
 
 	<-done
-	return r.out
+	return results
 }
 
 func (r *reportHandler) GetOrderedReports() chan pipeline.Report {
 	done := make(chan struct{})
+	results := make(chan pipeline.Report)
+
 	go func() {
 		done <- struct{}{}
 		for report := range r.unordered {
 			if report.ID == r.currentReport {
 				// The message is the expected. Send it.
-				r.out <- report
+				results <- report
 				r.currentReport++
 			} else {
 				// This message is not the expected. Store it.
@@ -138,7 +140,7 @@ func (r *reportHandler) GetOrderedReports() chan pipeline.Report {
 			// Check if there are stored messages and send them.
 			for {
 				if currentReport, ok := r.queued[r.currentReport]; ok {
-					r.out <- currentReport
+					results <- currentReport
 					delete(r.queued, r.currentReport)
 					r.currentReport++
 				} else {
@@ -146,9 +148,9 @@ func (r *reportHandler) GetOrderedReports() chan pipeline.Report {
 				}
 			}
 		}
-		close(r.out)
+		close(results)
 	}()
 
 	<-done
-	return r.out
+	return results
 }
