@@ -5,19 +5,13 @@ import (
 	"bytes"
 	"compress/zlib"
 	"crypto/tls"
-	"io"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/redBorder/rbforwarder"
-)
-
-const (
-	errRequest = 101
-	errStatus  = 102
-	errHTTP    = 103
+	"github.com/redBorder/rbforwarder/pipeline"
 )
 
 // Sender receives data from pipe and send it via HTTP to an endpoint
@@ -25,7 +19,7 @@ type Sender struct {
 	id          int
 	client      *http.Client
 	batchBuffer map[string]*batchBuffer
-	reports     chan *rbforwarder.Message
+	reports     chan *pipeline.Message
 
 	// Statistics
 	counter int64
@@ -34,31 +28,48 @@ type Sender struct {
 	// Configuration
 	logger *logrus.Entry
 	config config
-}
-
-type batchBuffer struct {
-	buff         *bytes.Buffer
-	writer       io.Writer
-	timer        *time.Timer
-	mutex        *sync.Mutex
-	messageCount int64
-	messages     []*rbforwarder.Message
-}
-
-type config struct {
-	URL          string
-	Endpoint     string
-	IgnoreCert   bool
-	Deflate      bool
-	ShowCounter  int
-	BatchSize    int64
-	BatchTimeout time.Duration
+	raw    map[string]interface{}
 }
 
 // Init initializes an HTTP sender
-func (s *Sender) Init(id int, reports chan *rbforwarder.Message) error {
+func (s *Sender) Init(id int, reports chan *pipeline.Message) error {
 	s.id = id
 	s.reports = reports
+
+	// Parse config
+	if s.raw["url"] != nil {
+		s.config.URL = s.raw["url"].(string)
+	} else {
+		return errors.New("No url provided")
+	}
+
+	if s.raw["endpoint"] != nil {
+		s.config.Endpoint = s.raw["endpoint"].(string)
+	}
+
+	if s.raw["insecure"] != nil {
+		s.config.IgnoreCert = s.raw["insecure"].(bool)
+		if s.config.IgnoreCert {
+		}
+	}
+
+	if s.raw["batchsize"] != nil {
+		s.config.BatchSize = int64(s.raw["batchsize"].(int))
+	} else {
+		s.config.BatchSize = 1
+	}
+
+	if s.raw["batchtimeout"] != nil {
+		s.config.BatchTimeout = time.Duration(s.raw["batchtimeout"].(int)) * time.Millisecond
+	}
+
+	if s.raw["deflate"] != nil {
+		s.config.Deflate = s.raw["deflate"].(bool)
+	}
+
+	if s.raw["showcounter"] != nil {
+		s.config.ShowCounter = s.raw["showcounter"].(int)
+	}
 
 	// Create the client object. Useful for skipping SSL verify
 	tr := &http.Transport{}
@@ -87,7 +98,7 @@ func (s *Sender) Init(id int, reports chan *rbforwarder.Message) error {
 
 // OnMessage stores a message received from the pipeline into a buffer to perform
 // batching.
-func (s *Sender) OnMessage(message *rbforwarder.Message) error {
+func (s *Sender) OnMessage(message *pipeline.Message) error {
 
 	// logger.Printf("[%d] Sending message ID: [%d]", s.id, message)
 

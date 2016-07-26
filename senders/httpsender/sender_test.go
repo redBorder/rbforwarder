@@ -4,13 +4,17 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/redBorder/rbforwarder"
+	"github.com/redBorder/rbforwarder/pipeline"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestInitSuccess(t *testing.T) {
-	reports := make(chan *rbforwarder.Message)
-	httpSender := new(Sender)
+	reports := make(chan *pipeline.Message)
+	httpSender := &Sender{
+		raw: map[string]interface{}{
+			"url": "http://example.com",
+		},
+	}
 	httpSender.config.ShowCounter = 1
 	httpSender.config.IgnoreCert = true
 

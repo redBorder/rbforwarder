@@ -1,49 +1,44 @@
 package rbforwarder
 
-import "time"
+import (
+	"time"
 
-// Report is used by the source to obtain the status of a sent message
-type Report struct {
-	ID         uint64 // Unique ID for the report, used to maintain sequence
-	Status     string // Result of the sending
-	StatusCode int    // Result of the sending
-	Retries    int
-	Metadata   map[string]interface{}
-}
+	"github.com/redBorder/rbforwarder/pipeline"
+)
 
 // reportHandlerConfig is used to store the configuration for the reportHandler
 type reportHandlerConfig struct {
 	maxRetries int
 	backoff    int
-	queue      int
+	queueSize  int
 }
 
 // reportHandler is used to handle the reports produced by the last element
 // of the pipeline. The first element of the pipeline can know the status
 // of the produced message using GetReports() or GetOrderedReports()
 type reportHandler struct {
-	in            chan *Message     // Receive messages
-	freedMessages chan *Message     // Messages after its report has been delivered
-	retry         chan *Message     // Send messages to retry
-	unordered     chan Report       // Send reports out of order
-	out           chan Report       // Send reports in order
-	close         chan struct{}     // Stop sending reports
-	queued        map[uint64]Report // Store pending reports
-	currentReport uint64            // Last delivered report
+	in            chan *pipeline.Message     // Receive messages
+	freedMessages chan *pipeline.Message     // Messages after its report has been delivered
+	retry         chan *pipeline.Message     // Send messages to retry
+	unordered     chan pipeline.Report       // Send reports out of order
+	out           chan pipeline.Report       // Send reports in order
+	close         chan struct{}              // Stop sending reports
+	queued        map[uint64]pipeline.Report // Store pending reports
+	currentReport uint64                     // Last delivered report
 
 	config reportHandlerConfig
 }
 
 // newReportHandler creates a new instance of reportHandler
-func newReportHandler(maxRetries, backoff, queue int, retry chan *Message) *reportHandler {
+func newReportHandler(maxRetries, backoff, queueSize int, retry chan *pipeline.Message) *reportHandler {
 	return &reportHandler{
-		in:            make(chan *Message, queue),
-		freedMessages: make(chan *Message, queue),
+		in:            make(chan *pipeline.Message, queueSize),
+		freedMessages: make(chan *pipeline.Message, queueSize),
 		retry:         retry,
-		unordered:     make(chan Report, queue),
-		out:           make(chan Report, queue),
+		unordered:     make(chan pipeline.Report, queueSize),
+		out:           make(chan pipeline.Report, queueSize),
 		close:         make(chan struct{}),
-		queued:        make(map[uint64]Report),
+		queued:        make(map[uint64]pipeline.Report),
 		config: reportHandlerConfig{
 			maxRetries: maxRetries,
 			backoff:    backoff,
@@ -80,7 +75,7 @@ func (r *reportHandler) Init() {
 					message.OutputBuffer.Reset()
 					message.Data = nil
 					message.Metadata = make(map[string]interface{})
-					message.Report = Report{}
+					message.Report = pipeline.Report{}
 
 					// Send back the message to the pool
 					r.freedMessages <- message
@@ -110,7 +105,7 @@ func (r *reportHandler) Init() {
 	Logger.Debug("Report Handler ready")
 }
 
-func (r *reportHandler) GetReports() chan Report {
+func (r *reportHandler) GetReports() chan pipeline.Report {
 	done := make(chan struct{})
 
 	go func() {
@@ -126,7 +121,7 @@ func (r *reportHandler) GetReports() chan Report {
 	return r.out
 }
 
-func (r *reportHandler) GetOrderedReports() chan Report {
+func (r *reportHandler) GetOrderedReports() chan pipeline.Report {
 	done := make(chan struct{})
 	go func() {
 		done <- struct{}{}

@@ -1,4 +1,4 @@
-package rbforwarder
+package pipeline
 
 import "bytes"
 
@@ -10,4 +10,13 @@ type Message struct {
 	Metadata     map[string]interface{} // Opaque
 
 	Report Report
+}
+
+// Report is used by the source to obtain the status of a sent message
+type Report struct {
+	ID         uint64 // Unique ID for the report, used to maintain sequence
+	Status     string // Result of the sending
+	StatusCode int    // Result of the sending
+	Retries    int
+	Metadata   map[string]interface{}
 }

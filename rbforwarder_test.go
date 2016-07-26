@@ -1,181 +1,122 @@
 package rbforwarder
 
 import (
-	"fmt"
-	"math/rand"
+	"errors"
+	"strconv"
 	"testing"
-	"time"
 
+	"github.com/redBorder/rbforwarder/pipeline"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 type TestSender struct {
 	channel chan string
-	reports chan *Message
+	reports chan *pipeline.Message
 }
 
-type TestSenderHelper struct {
-	channel chan string
-}
-
-func (tsender *TestSender) Init(id int, reports chan *Message) error {
+func (tsender *TestSender) Init(id int, reports chan *pipeline.Message) error {
 	tsender.reports = reports
 	return nil
 }
 
-func (tsender *TestSender) OnMessage(m *Message) error {
-	time.Sleep((time.Millisecond * 10) * time.Duration(rand.Int31n(50)))
+func (tsender *TestSender) OnMessage(m *pipeline.Message) error {
+	// time.Sleep((time.Millisecond * 10) * time.Duration(rand.Int31n(50)))
 
-	select {
-	case tsender.channel <- string(m.OutputBuffer.Bytes()):
-		m.Report.StatusCode = 0
-		m.Report.Status = "OK"
-		tsender.reports <- m
-	}
+	tsender.channel <- string(m.InputBuffer.Bytes())
+	m.Report.StatusCode = 0
+	m.Report.Status = "OK"
+	tsender.reports <- m
+
 	return nil
 }
 
-func (tsh *TestSenderHelper) CreateSender() Sender {
-	return &TestSender{
-		channel: tsh.channel,
-	}
-}
-
 func TestBackend(t *testing.T) {
-	Convey("Given a working backend", t, func() {
-		senderChannel := make(chan string, 100)
-		reportChannel := make(chan Report, 100)
+	Convey("Given a working pipeline", t, func() {
+		numMessages := 10000
 
-		senderHelper := new(TestSenderHelper)
-		senderHelper.channel = senderChannel
+		sender := &TestSender{
+			channel: make(chan string, 10000),
+		}
 
 		rbforwarder := NewRBForwarder(Config{
-			Retries:   0,
+			Retries:   1,
 			Workers:   10,
 			QueueSize: 10000,
 		})
 
-		go func() {
-			for report := range rbforwarder.GetOrderedReports() {
-				select {
-				case reportChannel <- report:
-				default:
-					Printf("Can't send report to report channel")
-				}
-			}
-		}()
-
-		rbforwarder.SetSenderHelper(senderHelper)
+		rbforwarder.SetSender(sender)
 		rbforwarder.Start()
 
-		Convey("When a \"Hello World\" message is received", func() {
-			if err := rbforwarder.Produce([]byte("Hola mundo")); err != nil {
-				Printf(err.Error())
-			}
-
-			Convey("A \"Hello World\" message should be sent", func() {
-				message := <-senderChannel
-				So(message, ShouldEqual, "Hola mundo")
-			})
-		})
-	})
-}
-
-func TestBackend2(t *testing.T) {
-	Convey("Given a working backend", t, func() {
-		reportChannel := make(chan Report, 100)
-		senderChannel := make(chan string, 100)
-
-		senderHelper := new(TestSenderHelper)
-		senderHelper.channel = senderChannel
-
-		rbforwarder := NewRBForwarder(Config{
-			Retries:   0,
-			Workers:   10,
-			QueueSize: 10000,
-		})
-
-		rbforwarder.SetSenderHelper(senderHelper)
-		rbforwarder.Start()
-
-		Convey("When a \"Hello World\" message is received", func() {
+		Convey("When 10000 messages are produced", func() {
 			go func() {
-				for report := range rbforwarder.GetOrderedReports() {
-					select {
-					case reportChannel <- report:
-					default:
-						Printf("Can't send report to report channel")
+				for i := 0; i < numMessages; i++ {
+					if err := rbforwarder.Produce([]byte(""), map[string]interface{}{
+						"message_id": i,
+					}); err != nil {
+						Printf(err.Error())
 					}
 				}
 			}()
 
-			if err := rbforwarder.Produce([]byte("Hola mundo")); err != nil {
+			Convey("10000 messages should be get by the worker", func() {
+				i := 0
+				for range sender.channel {
+					if i++; i >= numMessages {
+						break
+					}
+				}
+
+				So(i, ShouldEqual, numMessages)
+			})
+
+			Convey("10000 reports should be received", func() {
+				i := 0
+				for range rbforwarder.GetReports() {
+					if i++; i >= numMessages {
+						break
+					}
+				}
+
+				So(i, ShouldEqual, numMessages)
+			})
+
+			Convey("10000 reports should be received in order", func() {
+				i := 0
+				var err error
+
+				for report := range rbforwarder.GetOrderedReports() {
+					if report.Metadata["message_id"] != i {
+						err = errors.New("Unexpected report: " +
+							strconv.Itoa(report.Metadata["message_id"].(int)))
+					}
+					if i++; i >= numMessages {
+						break
+					}
+				}
+
+				So(err, ShouldBeNil)
+				So(i, ShouldEqual, numMessages)
+			})
+		})
+
+		Convey("When a \"Hello World\" message is produced", func() {
+			if err := rbforwarder.Produce([]byte("Hello World"), map[string]interface{}{
+				"message_id": "test123",
+			}); err != nil {
 				Printf(err.Error())
 			}
 
-			Convey("A report of the sent message should be received", func() {
-				report := <-reportChannel
+			Convey("\"Hello World\" message should be get by the worker", func() {
+				message := <-sender.channel
+				So(message, ShouldEqual, "Hello World")
+			})
+
+			Convey("A report of the \"Hello World\" message should be received", func() {
+				report := <-rbforwarder.GetReports()
 				So(report.StatusCode, ShouldEqual, 0)
 				So(report.Status, ShouldEqual, "OK")
 				So(report.ID, ShouldEqual, 0)
-			})
-		})
-	})
-}
-
-func TestBackend3(t *testing.T) {
-	Convey("Given a working backend", t, func() {
-		senderChannel := make(chan string, 100)
-		reportChannel := make(chan Report, 100)
-
-		senderHelper := new(TestSenderHelper)
-		senderHelper.channel = senderChannel
-
-		rbforwarder := NewRBForwarder(Config{
-			Retries:   0,
-			Workers:   10,
-			QueueSize: 10000,
-		})
-
-		rbforwarder.SetSenderHelper(senderHelper)
-		rbforwarder.Start()
-
-		Convey("When multiple messages are received", func() {
-
-			fmt.Println("")
-			go func() {
-				for report := range rbforwarder.GetOrderedReports() {
-					select {
-					case reportChannel <- report:
-					default:
-						Printf("Can't send report to report channel")
-					}
-				}
-			}()
-
-			for i := 0; i < 100; i++ {
-				if err := rbforwarder.Produce([]byte("Message")); err != nil {
-					Printf(err.Error())
-				}
-
-				go func() {
-					<-senderChannel
-				}()
-			}
-
-			Convey("Reports should be delivered ordered", func() {
-				var currentID uint64
-
-			forLoop:
-				for currentID = 0; currentID < 100; currentID++ {
-					report := <-reportChannel
-					if report.ID != currentID {
-						Printf("Missmatched report. Expected %d, Got %d", currentID, report.ID)
-						break forLoop
-					}
-				}
-
-				So(currentID, ShouldEqual, 100)
+				So(report.Metadata["message_id"], ShouldEqual, "test123")
 			})
 		})
 	})

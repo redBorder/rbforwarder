@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/redBorder/rbforwarder/pipeline"
 )
 
 // Version is the current tag
@@ -16,28 +17,13 @@ var log = logrus.New()
 // Logger for the package
 var Logger = logrus.NewEntry(log)
 
-//------------------------------------------------------------------------------
-// RBForwarder
-//------------------------------------------------------------------------------
-
-// Config stores the configuration for a forwarder
-type Config struct {
-	Retries     int
-	Backoff     int
-	Workers     int
-	QueueSize   int
-	MaxMessages int
-	MaxBytes    int
-	ShowCounter int
-}
-
 // RBForwarder is the main objecto of the package. It has the main methods for
 // send messages and get reports. It has a backend for routing messages between
 // workers
 type RBForwarder struct {
 	backend       *backend
 	reportHandler *reportHandler
-	reports       chan Report
+	reports       chan pipeline.Report
 	counter       uint64
 
 	config Config
@@ -54,7 +40,7 @@ func NewRBForwarder(config Config) *RBForwarder {
 
 	forwarder := &RBForwarder{
 		backend: backend,
-		reports: make(chan Report, config.QueueSize),
+		reports: make(chan pipeline.Report, config.QueueSize),
 		config:  config,
 	}
 
@@ -135,30 +121,31 @@ func (f *RBForwarder) Close() {
 	f.reportHandler.close <- struct{}{}
 }
 
-// SetSenderHelper set a sender on the backend
-func (f *RBForwarder) SetSenderHelper(SenderHelper SenderHelper) {
-	f.backend.senderHelper = SenderHelper
+// SetSender set a sender on the backend
+func (f *RBForwarder) SetSender(sender pipeline.Sender) {
+	f.backend.sender = sender
 }
 
 // GetReports is used by the source to get a report for a sent message.
 // Reports are delivered on the same order that was sent
-func (f *RBForwarder) GetReports() <-chan Report {
+func (f *RBForwarder) GetReports() <-chan pipeline.Report {
 	return f.reportHandler.GetReports()
 }
 
 // GetOrderedReports is the same as GetReports() but the reports are delivered
 // in order
-func (f *RBForwarder) GetOrderedReports() <-chan Report {
+func (f *RBForwarder) GetOrderedReports() <-chan pipeline.Report {
 	return f.reportHandler.GetOrderedReports()
 }
 
 // Produce is used by the source to send messages to the backend
-func (f *RBForwarder) Produce(buf []byte) error {
+func (f *RBForwarder) Produce(buf []byte, options map[string]interface{}) error {
 	message := <-f.backend.messagePool
 
 	message.InputBuffer = bytes.NewBuffer(buf)
+	message.Metadata = options
 
-	message.Report = Report{
+	message.Report = pipeline.Report{
 		ID:       atomic.AddUint64(&f.backend.currentProducedID, 1) - 1,
 		Metadata: message.Metadata,
 	}
