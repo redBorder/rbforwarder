@@ -7,7 +7,8 @@ import (
 	"github.com/redBorder/rbforwarder/pipeline"
 )
 
-type backend struct {
+// Backend orchestrates the pipeline
+type Backend struct {
 	sender pipeline.Sender
 
 	// Pool of workers
@@ -21,7 +22,7 @@ type backend struct {
 	messagePool chan *pipeline.Message
 
 	workers     int
-	queue       int
+	queueSize   int
 	maxMessages int
 	maxBytes    int
 
@@ -32,17 +33,25 @@ type backend struct {
 	keepSending     chan struct{}
 }
 
-func (b *backend) Init() {
+// NewBackend creates a new Backend
+func NewBackend(workers, queueSize, maxMessages, maxBytes int) *Backend {
+	b := &Backend{
+		workers:     workers,
+		queueSize:   queueSize,
+		maxMessages: maxMessages,
+		maxBytes:    maxBytes,
+	}
+
 	b.senderPool = make(chan chan *pipeline.Message, b.workers)
 
 	b.messages = make(chan *pipeline.Message)
 	b.input = make(chan *pipeline.Message)
 	b.reports = make(chan *pipeline.Message)
-	b.messagePool = make(chan *pipeline.Message, b.queue)
+	b.messagePool = make(chan *pipeline.Message, b.queueSize)
 
 	b.keepSending = make(chan struct{})
 
-	for i := 0; i < b.queue; i++ {
+	for i := 0; i < b.queueSize; i++ {
 		b.messagePool <- &pipeline.Message{
 			Metadata:     make(map[string]interface{}),
 			InputBuffer:  new(bytes.Buffer),
@@ -50,6 +59,11 @@ func (b *backend) Init() {
 		}
 	}
 
+	return b
+}
+
+// Init initializes a backend
+func (b *Backend) Init() {
 	for i := 0; i < b.workers; i++ {
 		b.startSender(i)
 	}
@@ -102,7 +116,7 @@ func (b *backend) Init() {
 }
 
 // Worker that sends the message
-func (b *backend) startSender(i int) {
+func (b *Backend) startSender(i int) {
 	sender := b.sender
 	sender.Init(i, b.reports)
 

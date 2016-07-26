@@ -7,47 +7,57 @@ import (
 
 	"github.com/redBorder/rbforwarder/pipeline"
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/mock"
 )
 
-type TestSender struct {
+type MockSender struct {
+	mock.Mock
 	channel chan string
 	reports chan *pipeline.Message
 }
 
-func (tsender *TestSender) Init(id int, reports chan *pipeline.Message) error {
-	tsender.reports = reports
-	return nil
+func (s *MockSender) Init(id int, reports chan *pipeline.Message) error {
+	args := s.Called(id, reports)
+	s.reports = reports
+	return args.Error(0)
 }
 
-func (tsender *TestSender) OnMessage(m *pipeline.Message) error {
-	// time.Sleep((time.Millisecond * 10) * time.Duration(rand.Int31n(50)))
+func (s *MockSender) OnMessage(m *pipeline.Message) error {
+	s.channel <- string(m.InputBuffer.Bytes())
+	s.reports <- m
 
-	tsender.channel <- string(m.InputBuffer.Bytes())
-	m.Report.StatusCode = 0
-	m.Report.Status = "OK"
-	tsender.reports <- m
+	args := s.Called(m)
 
-	return nil
+	return args.Error(0)
 }
 
 func TestBackend(t *testing.T) {
 	Convey("Given a working pipeline", t, func() {
 		numMessages := 10000
+		numWorkers := 10
 
-		sender := &TestSender{
+		sender := &MockSender{
 			channel: make(chan string, 10000),
 		}
 
 		rbforwarder := NewRBForwarder(Config{
-			Retries:   1,
-			Workers:   10,
+			Retries:   0,
+			Workers:   numWorkers,
 			QueueSize: 10000,
 		})
+
+		for i := 0; i < numWorkers; i++ {
+			sender.On("Init", i, rbforwarder.backend.reports).Return(nil)
+		}
 
 		rbforwarder.SetSender(sender)
 		rbforwarder.Start()
 
 		Convey("When 10000 messages are produced", func() {
+			sender.On("OnMessage", mock.AnythingOfType("*pipeline.Message")).
+				Return(nil).
+				Times(numMessages)
+
 			go func() {
 				for i := 0; i < numMessages; i++ {
 					if err := rbforwarder.Produce([]byte(""), map[string]interface{}{
@@ -67,6 +77,7 @@ func TestBackend(t *testing.T) {
 				}
 
 				So(i, ShouldEqual, numMessages)
+				sender.AssertExpectations(t)
 			})
 
 			Convey("10000 reports should be received", func() {
@@ -78,6 +89,7 @@ func TestBackend(t *testing.T) {
 				}
 
 				So(i, ShouldEqual, numMessages)
+				sender.AssertExpectations(t)
 			})
 
 			Convey("10000 reports should be received in order", func() {
@@ -96,6 +108,7 @@ func TestBackend(t *testing.T) {
 
 				So(err, ShouldBeNil)
 				So(i, ShouldEqual, numMessages)
+				sender.AssertExpectations(t)
 			})
 		})
 
@@ -107,16 +120,13 @@ func TestBackend(t *testing.T) {
 			}
 
 			Convey("\"Hello World\" message should be get by the worker", func() {
-				message := <-sender.channel
-				So(message, ShouldEqual, "Hello World")
-			})
+				sender.On("OnMessage", mock.MatchedBy(func(m *pipeline.Message) bool {
+					return m.Metadata["message_id"] == "test123"
+				})).Return(nil)
 
-			Convey("A report of the \"Hello World\" message should be received", func() {
 				report := <-rbforwarder.GetReports()
-				So(report.StatusCode, ShouldEqual, 0)
-				So(report.Status, ShouldEqual, "OK")
-				So(report.ID, ShouldEqual, 0)
 				So(report.Metadata["message_id"], ShouldEqual, "test123")
+				sender.AssertExpectations(t)
 			})
 		})
 

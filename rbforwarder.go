@@ -20,7 +20,7 @@ var Logger = logrus.NewEntry(log)
 // send messages and get reports. It has a backend for routing messages between
 // workers
 type RBForwarder struct {
-	backend       *backend
+	backend       *Backend
 	reportHandler *reportHandler
 	reports       chan pipeline.Report
 	counter       uint64
@@ -30,15 +30,8 @@ type RBForwarder struct {
 
 // NewRBForwarder creates a new Forwarder object
 func NewRBForwarder(config Config) *RBForwarder {
-	backend := &backend{
-		workers:     config.Workers,
-		queue:       config.QueueSize,
-		maxMessages: config.MaxMessages,
-		maxBytes:    config.MaxBytes,
-	}
-
 	forwarder := &RBForwarder{
-		backend: backend,
+		backend: NewBackend(config.Workers, config.QueueSize, config.MaxMessages, config.MaxBytes),
 		reports: make(chan pipeline.Report, config.QueueSize),
 		config:  config,
 	}
@@ -47,7 +40,7 @@ func NewRBForwarder(config Config) *RBForwarder {
 		config.Retries,
 		config.Backoff,
 		config.QueueSize,
-		backend.input,
+		forwarder.backend.input,
 	)
 
 	fields := logrus.Fields{
