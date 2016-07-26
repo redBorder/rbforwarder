@@ -41,9 +41,9 @@ func TestBackend(t *testing.T) {
 		}
 
 		rbforwarder := NewRBForwarder(Config{
-			Retries:   0,
+			Retries:   1,
 			Workers:   numWorkers,
-			QueueSize: 10000,
+			QueueSize: numMessages,
 		})
 
 		for i := 0; i < numWorkers; i++ {
@@ -58,15 +58,13 @@ func TestBackend(t *testing.T) {
 				Return(nil).
 				Times(numMessages)
 
-			go func() {
-				for i := 0; i < numMessages; i++ {
-					if err := rbforwarder.Produce([]byte(""), map[string]interface{}{
-						"message_id": i,
-					}); err != nil {
-						Printf(err.Error())
-					}
+			for i := 0; i < numMessages; i++ {
+				if err := rbforwarder.Produce([]byte(""), map[string]interface{}{
+					"message_id": i,
+				}); err != nil {
+					Printf(err.Error())
 				}
-			}()
+			}
 
 			Convey("10000 messages should be get by the worker", func() {
 				i := 0
@@ -77,6 +75,7 @@ func TestBackend(t *testing.T) {
 				}
 
 				So(i, ShouldEqual, numMessages)
+
 				sender.AssertExpectations(t)
 			})
 
@@ -89,6 +88,7 @@ func TestBackend(t *testing.T) {
 				}
 
 				So(i, ShouldEqual, numMessages)
+
 				sender.AssertExpectations(t)
 			})
 
@@ -108,6 +108,7 @@ func TestBackend(t *testing.T) {
 
 				So(err, ShouldBeNil)
 				So(i, ShouldEqual, numMessages)
+
 				sender.AssertExpectations(t)
 			})
 		})
