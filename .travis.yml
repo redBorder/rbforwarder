@@ -8,7 +8,8 @@ branches:
     - develop
 
 go:
-- 1.5.2
+  - 1.5.4
+  - 1.6.3
 
 script:
   - $HOME/gopath/bin/goveralls
