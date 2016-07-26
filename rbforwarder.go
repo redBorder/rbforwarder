@@ -3,7 +3,6 @@ package rbforwarder
 import (
 	"bytes"
 	"sync/atomic"
-	"time"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/redBorder/rbforwarder/pipeline"
@@ -73,24 +72,6 @@ func (f *RBForwarder) Start() {
 
 	// Start the report handler
 	f.reportHandler.Init()
-
-	if f.config.ShowCounter > 0 {
-		go func() {
-			for {
-				timer := time.NewTimer(
-					time.Duration(f.config.ShowCounter) * time.Second,
-				)
-				<-timer.C
-				if f.counter > 0 {
-					Logger.Infof(
-						"Messages per second %d",
-						f.counter/uint64(f.config.ShowCounter),
-					)
-					f.counter = 0
-				}
-			}
-		}()
-	}
 
 	// Get reports from the backend and send them to the reportHandler
 	done := make(chan struct{})

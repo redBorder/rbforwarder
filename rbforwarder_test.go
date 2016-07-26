@@ -119,5 +119,9 @@ func TestBackend(t *testing.T) {
 				So(report.Metadata["message_id"], ShouldEqual, "test123")
 			})
 		})
+
+		Reset(func() {
+			rbforwarder.Close()
+		})
 	})
 }
