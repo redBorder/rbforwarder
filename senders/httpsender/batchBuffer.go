@@ -15,5 +15,5 @@ type batchBuffer struct {
 	timer        *time.Timer
 	mutex        *sync.Mutex
 	messageCount int64
-	messages     []*pipeline.Message
+	messages     []pipeline.Messenger
 }

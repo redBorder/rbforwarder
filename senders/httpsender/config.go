@@ -2,7 +2,8 @@ package httpsender
 
 import "time"
 
-type config struct {
+// Config contains the configuration for an HTTP Sender
+type Config struct {
 	URL          string
 	Endpoint     string
 	IgnoreCert   bool

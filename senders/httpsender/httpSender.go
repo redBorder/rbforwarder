@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/zlib"
 	"crypto/tls"
-	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -19,7 +18,6 @@ type Sender struct {
 	id          int
 	client      *http.Client
 	batchBuffer map[string]*batchBuffer
-	reports     chan *pipeline.Message
 
 	// Statistics
 	counter int64
@@ -27,49 +25,12 @@ type Sender struct {
 
 	// Configuration
 	logger *logrus.Entry
-	config config
-	raw    map[string]interface{}
+	config Config
 }
 
 // Init initializes an HTTP sender
-func (s *Sender) Init(id int, reports chan *pipeline.Message) error {
+func (s *Sender) Init(id int) error {
 	s.id = id
-	s.reports = reports
-
-	// Parse config
-	if s.raw["url"] != nil {
-		s.config.URL = s.raw["url"].(string)
-	} else {
-		return errors.New("No url provided")
-	}
-
-	if s.raw["endpoint"] != nil {
-		s.config.Endpoint = s.raw["endpoint"].(string)
-	}
-
-	if s.raw["insecure"] != nil {
-		s.config.IgnoreCert = s.raw["insecure"].(bool)
-		if s.config.IgnoreCert {
-		}
-	}
-
-	if s.raw["batchsize"] != nil {
-		s.config.BatchSize = int64(s.raw["batchsize"].(int))
-	} else {
-		s.config.BatchSize = 1
-	}
-
-	if s.raw["batchtimeout"] != nil {
-		s.config.BatchTimeout = time.Duration(s.raw["batchtimeout"].(int)) * time.Millisecond
-	}
-
-	if s.raw["deflate"] != nil {
-		s.config.Deflate = s.raw["deflate"].(bool)
-	}
-
-	if s.raw["showcounter"] != nil {
-		s.config.ShowCounter = s.raw["showcounter"].(int)
-	}
 
 	// Create the client object. Useful for skipping SSL verify
 	tr := &http.Transport{}
@@ -98,15 +59,15 @@ func (s *Sender) Init(id int, reports chan *pipeline.Message) error {
 
 // OnMessage stores a message received from the pipeline into a buffer to perform
 // batching.
-func (s *Sender) OnMessage(message *pipeline.Message) error {
+func (s *Sender) OnMessage(message pipeline.Messenger) error {
 
 	// logger.Printf("[%d] Sending message ID: [%d]", s.id, message)
 
 	// We can send batch only for messages with the same path
 	var path string
 
-	if message.Report.Metadata[s.config.Endpoint] != nil {
-		path = message.Report.Metadata[s.config.Endpoint].(string)
+	if opt, err := message.GetOpt(s.config.Endpoint); err == nil {
+		path = opt.(string)
 	}
 
 	// Initialize buffer for path
@@ -148,7 +109,12 @@ func (s *Sender) OnMessage(message *pipeline.Message) error {
 
 	// Write the new message to the buffer and increase the number of messages in
 	// the buffer
-	if _, err := batchBuffer.writer.Write(message.OutputBuffer.Bytes()); err != nil {
+	data, err := message.PopData()
+	if err != nil {
+		return err
+	}
+
+	if _, err := batchBuffer.writer.Write(data); err != nil {
 		s.logger.Error(err)
 	}
 	batchBuffer.messages = append(batchBuffer.messages, message)
@@ -202,9 +168,7 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	if err != nil {
 		s.logger.Errorf("Error creating request: %s", err.Error())
 		for _, message := range batchBuffer.messages {
-			message.Report.StatusCode = errRequest
-			message.Report.Status = err.Error()
-			s.reports <- message
+			message.Done(errRequest, err.Error())
 		}
 		return
 	}
@@ -218,9 +182,7 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	res, err := s.client.Do(req)
 	if err != nil {
 		for _, message := range batchBuffer.messages {
-			message.Report.StatusCode = errHTTP
-			message.Report.Status = err.Error()
-			s.reports <- message
+			message.Done(errHTTP, err.Error())
 		}
 		return
 	}
@@ -229,15 +191,11 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	// Send the reports
 	if res.StatusCode >= 400 {
 		for _, message := range batchBuffer.messages {
-			message.Report.StatusCode = errStatus
-			message.Report.Status = res.Status
-			s.reports <- message
+			message.Done(errStatus, res.Status)
 		}
 	} else {
 		for _, message := range batchBuffer.messages {
-			message.Report.StatusCode = 0
-			message.Report.Status = res.Status
-			s.reports <- message
+			message.Done(0, res.Status)
 		}
 	}
 

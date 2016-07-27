@@ -1,26 +1,14 @@
 package rbforwarder
 
-import (
-	"bytes"
-
-	"github.com/redBorder/rbforwarder/pipeline"
-)
+import "github.com/redBorder/rbforwarder/pipeline"
 
 // Backend orchestrates the pipeline
 type Backend struct {
-	sender pipeline.Sender
-
-	senderPool chan chan *pipeline.Message
-
-	currentProducedID uint64
-
-	input       chan *pipeline.Message
-	messages    chan *pipeline.Message
-	reports     chan *pipeline.Message
-	messagePool chan *pipeline.Message
-
-	workers   int
-	queueSize int
+	sender     pipeline.Sender
+	senderPool chan chan *message
+	input      chan *message
+	workers    int
+	queueSize  int
 }
 
 // NewBackend creates a new Backend
@@ -30,19 +18,8 @@ func NewBackend(workers, queueSize, maxMessages, maxBytes int) *Backend {
 		queueSize: queueSize,
 	}
 
-	b.senderPool = make(chan chan *pipeline.Message, b.workers)
-
-	b.messages = make(chan *pipeline.Message)
-	b.input = make(chan *pipeline.Message)
-	b.reports = make(chan *pipeline.Message)
-	b.messagePool = make(chan *pipeline.Message, b.queueSize)
-
-	for i := 0; i < b.queueSize; i++ {
-		b.messagePool <- &pipeline.Message{
-			InputBuffer:  new(bytes.Buffer),
-			OutputBuffer: new(bytes.Buffer),
-		}
-	}
+	b.senderPool = make(chan chan *message, b.workers)
+	b.input = make(chan *message)
 
 	return b
 }
@@ -70,9 +47,9 @@ func (b *Backend) Init() {
 // Worker that sends the message
 func (b *Backend) startSender(i int) {
 	sender := b.sender
-	sender.Init(i, b.reports)
+	sender.Init(i)
 
-	workerChannel := make(chan *pipeline.Message)
+	workerChannel := make(chan *message)
 
 	go func() {
 		for {

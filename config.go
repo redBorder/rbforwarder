@@ -10,3 +10,10 @@ type Config struct {
 	MaxBytes    int
 	ShowCounter int
 }
+
+// messageHandlerConfig is used to store the configuration for the reportHandler
+type messageHandlerConfig struct {
+	maxRetries int
+	backoff    int
+	queueSize  int
+}

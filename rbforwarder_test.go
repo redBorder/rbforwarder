@@ -14,31 +14,24 @@ type MockSender struct {
 	mock.Mock
 
 	channel chan string
-	reports chan *pipeline.Message
 
 	status     string
 	statusCode int
 }
 
-func (s *MockSender) Init(id int, reports chan *pipeline.Message) error {
-	args := s.Called(id, reports)
-	s.reports = reports
+func (s *MockSender) Init(id int) error {
+	args := s.Called(id)
 	return args.Error(0)
 }
 
-func (s *MockSender) OnMessage(m *pipeline.Message) error {
-	s.channel <- string(m.InputBuffer.Bytes())
-
-	m.Report.StatusCode = s.statusCode
-	m.Report.Status = s.status
-	s.reports <- m
-
-	args := s.Called(m)
-
-	return args.Error(0)
+func (s *MockSender) OnMessage(m pipeline.Messenger) {
+	data, _ := m.PopData()
+	s.channel <- string(data)
+	m.Done(s.statusCode, s.status)
+	s.Called(m)
 }
 
-func TestBackend(t *testing.T) {
+func TestRBForwarder(t *testing.T) {
 	Convey("Given a working pipeline", t, func() {
 		numMessages := 10000
 		numWorkers := 10
@@ -55,14 +48,113 @@ func TestBackend(t *testing.T) {
 		})
 
 		for i := 0; i < numWorkers; i++ {
-			sender.On("Init", i, rbforwarder.backend.reports).Return(nil)
+			sender.On("Init", i).Return(nil)
 		}
 
 		rbforwarder.SetSender(sender)
-		rbforwarder.Start()
+
+		Convey("When a \"Hello World\" message is produced", func() {
+			sender.status = "OK"
+			sender.statusCode = 0
+
+			sender.On("OnMessage", mock.MatchedBy(func(m *message) bool {
+				opt, err := m.GetOpt("message_id")
+				if err != nil {
+					return false
+				}
+
+				return opt.(string) == "test123"
+			}))
+
+			if err := rbforwarder.Produce([]byte("Hello World"), map[string]interface{}{
+				"message_id": "test123",
+			}); err != nil {
+				Printf(err.Error())
+			}
+
+			Convey("\"Hello World\" message should be get by the worker", func() {
+				report := <-rbforwarder.GetReports()
+
+				So(report.opts["message_id"], ShouldEqual, "test123")
+				So(report.code, ShouldEqual, 0)
+				So(report.status, ShouldEqual, "OK")
+
+				sender.AssertExpectations(t)
+			})
+		})
+
+		Convey("When calling OnMessage() with options", func() {
+			sender.On("OnMessage", mock.MatchedBy(func(m *message) bool {
+				_, err := m.GetOpt("nonexistent")
+				return err != nil
+			}))
+
+			Convey("Should not be possible to read an nonexistent option", func() {
+				if err := rbforwarder.Produce([]byte("Hello World"), map[string]interface{}{}); err != nil {
+					Printf(err.Error())
+				}
+
+				report := <-rbforwarder.GetReports()
+
+				So(report.opts, ShouldNotBeNil)
+				So(report.opts, ShouldBeEmpty)
+
+				sender.AssertExpectations(t)
+			})
+		})
+
+		Convey("When calling OnMessage() without options", func() {
+			sender.On("OnMessage", mock.MatchedBy(func(m *message) bool {
+				_, err := m.GetOpt("nonexistent")
+				return err != nil
+			}))
+
+			Convey("Should not be possible to read the option", func() {
+				if err := rbforwarder.Produce([]byte("Hello World"), nil); err != nil {
+					Printf(err.Error())
+				}
+
+				report := <-rbforwarder.GetReports()
+
+				So(report.opts, ShouldBeNil)
+
+				sender.AssertExpectations(t)
+			})
+		})
+
+		Convey("When a message fails to send", func() {
+			sender.status = "Fake Error"
+			sender.statusCode = 99
+
+			sender.On("OnMessage", mock.MatchedBy(func(m *message) bool {
+				opt, err := m.GetOpt("message_id")
+				if err != nil {
+					return false
+				}
+
+				return opt.(string) == "test123"
+			}))
+
+			if err := rbforwarder.Produce([]byte("Hello World"), map[string]interface{}{
+				"message_id": "test123",
+			}); err != nil {
+				Printf(err.Error())
+			}
+
+			Convey("The message should be retried\n", func() {
+				report := <-rbforwarder.GetReports()
+
+				So(report.opts["message_id"], ShouldEqual, "test123")
+				So(report.status, ShouldEqual, "Fake Error")
+				So(report.code, ShouldEqual, 99)
+				So(report.retries, ShouldEqual, numRetries)
+
+				sender.AssertExpectations(t)
+			})
+		})
 
 		Convey("When 10000 messages are produced", func() {
-			sender.On("OnMessage", mock.AnythingOfType("*pipeline.Message")).
+			sender.On("OnMessage", mock.AnythingOfType("*rbforwarder.message")).
 				Return(nil).
 				Times(numMessages)
 
@@ -79,6 +171,8 @@ func TestBackend(t *testing.T) {
 				for range sender.channel {
 					if i++; i >= numMessages {
 						break
+					} else if i > numMessages {
+						t.FailNow()
 					}
 				}
 
@@ -88,6 +182,8 @@ func TestBackend(t *testing.T) {
 				for range rbforwarder.GetReports() {
 					if i++; i >= numMessages {
 						break
+					} else if i > numMessages {
+						t.FailNow()
 					}
 				}
 
@@ -97,8 +193,10 @@ func TestBackend(t *testing.T) {
 			Convey("10000 reports should be received", func() {
 				i := 0
 				for range rbforwarder.GetReports() {
-					if i++; i >= numMessages {
+					if i++; i == numMessages {
 						break
+					} else if i > numMessages {
+						t.FailNow()
 					}
 				}
 
@@ -112,68 +210,19 @@ func TestBackend(t *testing.T) {
 				var err error
 
 				for report := range rbforwarder.GetOrderedReports() {
-					if report.Metadata["message_id"] != i {
+					if report.opts["message_id"] != i {
 						err = errors.New("Unexpected report: " +
-							strconv.Itoa(report.Metadata["message_id"].(int)))
+							strconv.Itoa(report.opts["message_id"].(int)))
 					}
 					if i++; i >= numMessages {
 						break
+					} else if i > numMessages {
+						t.FailNow()
 					}
 				}
 
 				So(err, ShouldBeNil)
 				So(i, ShouldEqual, numMessages)
-
-				sender.AssertExpectations(t)
-			})
-		})
-
-		Convey("When a \"Hello World\" message is produced", func() {
-			sender.status = "OK"
-			sender.statusCode = 0
-
-			if err := rbforwarder.Produce([]byte("Hello World"), map[string]interface{}{
-				"message_id": "test123",
-			}); err != nil {
-				Printf(err.Error())
-			}
-
-			Convey("\"Hello World\" message should be get by the worker", func() {
-				sender.On("OnMessage", mock.MatchedBy(func(m *pipeline.Message) bool {
-					return m.Report.Metadata["message_id"] == "test123"
-				})).Return(nil)
-
-				report := <-rbforwarder.GetReports()
-
-				So(report.Metadata["message_id"], ShouldEqual, "test123")
-				So(report.StatusCode, ShouldEqual, 0)
-				So(report.Status, ShouldEqual, "OK")
-
-				sender.AssertExpectations(t)
-			})
-		})
-
-		Convey("When a message fails to send", func() {
-			sender.status = "Fake Error"
-			sender.statusCode = 99
-
-			if err := rbforwarder.Produce([]byte("Hello World"), map[string]interface{}{
-				"message_id": "test123",
-			}); err != nil {
-				Printf(err.Error())
-			}
-
-			Convey("The message should be retried", func() {
-				sender.On("OnMessage", mock.MatchedBy(func(m *pipeline.Message) bool {
-					return m.Report.Metadata["message_id"] == "test123"
-				})).Return(nil)
-
-				report := <-rbforwarder.GetOrderedReports()
-
-				So(report.Metadata["message_id"], ShouldEqual, "test123")
-				So(report.Status, ShouldEqual, "Fake Error")
-				So(report.StatusCode, ShouldEqual, 99)
-				So(report.Retries, ShouldEqual, numRetries)
 
 				sender.AssertExpectations(t)
 			})

@@ -1,9 +1,6 @@
 package rbforwarder
 
 import (
-	"bytes"
-	"sync/atomic"
-
 	"github.com/Sirupsen/logrus"
 	"github.com/redBorder/rbforwarder/pipeline"
 )
@@ -20,10 +17,9 @@ var Logger = logrus.NewEntry(log)
 // send messages and get reports. It has a backend for routing messages between
 // workers
 type RBForwarder struct {
-	backend       *Backend
-	reportHandler *reportHandler
-	reports       chan pipeline.Report
-	counter       uint64
+	backend           *Backend
+	messageHandler    *messageHandler
+	currentProducedID uint64
 
 	config Config
 }
@@ -32,11 +28,10 @@ type RBForwarder struct {
 func NewRBForwarder(config Config) *RBForwarder {
 	forwarder := &RBForwarder{
 		backend: NewBackend(config.Workers, config.QueueSize, config.MaxMessages, config.MaxBytes),
-		reports: make(chan pipeline.Report, config.QueueSize),
 		config:  config,
 	}
 
-	forwarder.reportHandler = newReportHandler(
+	forwarder.messageHandler = newMessageHandler(
 		config.Retries,
 		config.Backoff,
 		config.QueueSize,
@@ -57,71 +52,46 @@ func NewRBForwarder(config Config) *RBForwarder {
 	return forwarder
 }
 
-// Start spawning workers
-func (f *RBForwarder) Start() {
-
-	// Start the backend
-	f.backend.Init()
-
-	// Start the report handler
-	f.reportHandler.Init()
-
-	// Get reports from the backend and send them to the reportHandler
-	done := make(chan struct{})
-	go func() {
-		done <- struct{}{}
-		for message := range f.backend.reports {
-			if message.Report.StatusCode == 0 {
-				atomic.AddUint64(&f.counter, 1)
-			}
-			f.reportHandler.in <- message
-		}
-	}()
-	<-done
-
-	// Listen for reutilizable messages and send them back to the pool
-	go func() {
-		done <- struct{}{}
-		for message := range f.reportHandler.freedMessages {
-			f.backend.messagePool <- message
-		}
-	}()
-	<-done
-}
-
 // Close stop pending actions
 func (f *RBForwarder) Close() {
-	f.reportHandler.close <- struct{}{}
+	f.messageHandler.close <- struct{}{}
 }
 
 // SetSender set a sender on the backend
 func (f *RBForwarder) SetSender(sender pipeline.Sender) {
 	f.backend.sender = sender
+
+	// Start the backend
+	f.backend.Init()
+
+	// Start the report handler
+	f.messageHandler.Init()
 }
 
 // GetReports is used by the source to get a report for a sent message.
 // Reports are delivered on the same order that was sent
-func (f *RBForwarder) GetReports() <-chan pipeline.Report {
-	return f.reportHandler.GetReports()
+func (f *RBForwarder) GetReports() <-chan Report {
+	return f.messageHandler.GetReports()
 }
 
 // GetOrderedReports is the same as GetReports() but the reports are delivered
 // in order
-func (f *RBForwarder) GetOrderedReports() <-chan pipeline.Report {
-	return f.reportHandler.GetOrderedReports()
+func (f *RBForwarder) GetOrderedReports() <-chan Report {
+	return f.messageHandler.GetOrderedReports()
 }
 
 // Produce is used by the source to send messages to the backend
 func (f *RBForwarder) Produce(buf []byte, options map[string]interface{}) error {
-	message := <-f.backend.messagePool
+	seq := f.currentProducedID
+	f.currentProducedID++
 
-	message.InputBuffer = bytes.NewBuffer(buf)
-
-	message.Report = pipeline.Report{
-		ID:       atomic.AddUint64(&f.backend.currentProducedID, 1) - 1,
-		Metadata: options,
+	message := &message{
+		seq:     seq,
+		opts:    options,
+		channel: f.messageHandler.input,
 	}
 
+	message.PushData(buf)
 	f.backend.input <- message
 
 	return nil
