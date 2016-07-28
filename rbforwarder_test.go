@@ -49,11 +49,11 @@ func (c *MockComponent) OnMessage(
 	next types.Next,
 	done types.Done,
 ) {
+	c.Called(m)
 
 	data, _ := m.PopData()
 	c.channel <- string(data)
 	done(m, c.statusCode, c.status)
-	c.Called(m)
 }
 
 func TestRBForwarder(t *testing.T) {

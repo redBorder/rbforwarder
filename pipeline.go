@@ -1,6 +1,7 @@
 package rbforwarder
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/redBorder/rbforwarder/types"
@@ -12,7 +13,7 @@ type pipeline struct {
 	input          chan *message
 	output         chan *message
 
-	working int
+	working int32
 }
 
 // newPipeline creates a new Backend
@@ -32,7 +33,7 @@ func newPipeline(input, output chan *message) *pipeline {
 
 		// When a close signal is received clean the workers. Wait for workers to
 		// terminate
-		p.working = 0
+		atomic.StoreInt32(&p.working, 0)
 		for _, componentPool := range p.componentPools {
 		loop:
 			for {
@@ -86,7 +87,7 @@ func (p *pipeline) PushComponent(c types.Composer, w int) {
 					},
 				)
 
-				if p.working == 1 {
+				if atomic.LoadInt32(&p.working) == 1 {
 					p.componentPools[index] <- worker
 				}
 			}
