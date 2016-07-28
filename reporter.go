@@ -2,11 +2,11 @@ package rbforwarder
 
 import "time"
 
-// reportHandler is used to handle the reports produced by the last element
+// reporter is used to handle the reports produced by the last element
 // of the pipeline. The first element of the pipeline can know the status
 // of the produced message using GetReports() or GetOrderedReports()
-type messageHandler struct {
-	handler  chan *message // Receive messages from pipeline
+type reporter struct {
+	input    chan *message // Receive messages from pipeline
 	pipeline chan *message // Send messages back to the pipeline
 	out      chan *message // Send reports to the user
 
@@ -18,13 +18,13 @@ type messageHandler struct {
 }
 
 // newReportHandler creates a new instance of reportHandler
-func newMessageHandler(
+func newReporter(
 	maxRetries, backoff int,
-	handler, pipeline chan *message,
-) *messageHandler {
+	input, pipeline chan *message,
+) *reporter {
 
-	mh := &messageHandler{
-		handler:  handler,
+	r := &reporter{
+		input:    input,
 		pipeline: pipeline,
 		out:      make(chan *message, 100),
 
@@ -36,17 +36,17 @@ func newMessageHandler(
 
 	go func() {
 		// Get reports from the handler channel
-		for m := range mh.handler {
+		for m := range r.input {
 			// If the message has status code 0 (success) send the report to the user
-			if m.code == 0 || mh.maxRetries == 0 {
-				mh.out <- m
+			if m.code == 0 || r.maxRetries == 0 {
+				r.out <- m
 				continue
 			}
 
 			// If the message has status code != 0 (fail) but has been retried the
 			// maximum number or retries also send it to the user
-			if mh.maxRetries > 0 && m.retries >= mh.maxRetries {
-				mh.out <- m
+			if r.maxRetries > 0 && m.retries >= r.maxRetries {
+				r.out <- m
 				continue
 			}
 
@@ -60,24 +60,24 @@ func newMessageHandler(
 					WithField("Code", m.code).
 					Warnf("Retrying message")
 
-				<-time.After(time.Duration(mh.backoff) * time.Second)
-				mh.pipeline <- m
+				<-time.After(time.Duration(r.backoff) * time.Second)
+				r.pipeline <- m
 			}(m)
 		}
 
-		close(mh.out)
+		close(r.out)
 	}()
 
 	Logger.Debug("Message Handler ready")
 
-	return mh
+	return r
 }
 
-func (mh *messageHandler) GetReports() chan Report {
+func (r *reporter) GetReports() chan Report {
 	reports := make(chan Report)
 
 	go func() {
-		for message := range mh.out {
+		for message := range r.out {
 			reports <- message.GetReport()
 		}
 
@@ -87,28 +87,28 @@ func (mh *messageHandler) GetReports() chan Report {
 	return reports
 }
 
-func (mh *messageHandler) GetOrderedReports() chan Report {
+func (r *reporter) GetOrderedReports() chan Report {
 	reports := make(chan Report)
 
 	go func() {
-		for message := range mh.out {
+		for message := range r.out {
 			report := message.GetReport()
 
-			if message.seq == mh.currentReport {
+			if message.seq == r.currentReport {
 				// The message is the expected. Send it.
 				reports <- report
-				mh.currentReport++
+				r.currentReport++
 			} else {
 				// This message is not the expected. Store it.
-				mh.queued[message.seq] = report
+				r.queued[message.seq] = report
 			}
 
 			// Check if there are stored messages and send them.
 			for {
-				if currentReport, ok := mh.queued[mh.currentReport]; ok {
+				if currentReport, ok := r.queued[r.currentReport]; ok {
 					reports <- currentReport
-					delete(mh.queued, mh.currentReport)
-					mh.currentReport++
+					delete(r.queued, r.currentReport)
+					r.currentReport++
 				} else {
 					break
 				}

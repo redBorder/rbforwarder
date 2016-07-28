@@ -20,8 +20,8 @@ var Logger = logrus.NewEntry(log)
 // send messages and get reports. It has a backend for routing messages between
 // workers
 type RBForwarder struct {
-	p  *pipeline
-	mh *messageHandler
+	p *pipeline
+	r *reporter
 
 	currentProducedID uint64
 	working           uint32
@@ -35,7 +35,7 @@ func NewRBForwarder(config Config) *RBForwarder {
 	forwarder := &RBForwarder{
 		working: 1,
 		p:       newPipeline(pipelineChan, handlerChan),
-		mh: newMessageHandler(
+		r: newReporter(
 			config.Retries,
 			config.Backoff,
 			handlerChan,
@@ -70,13 +70,13 @@ func (f *RBForwarder) PushComponents(components []types.Composer, w []int) {
 // GetReports is used by the source to get a report for a sent message.
 // Reports are delivered on the same order that was sent
 func (f *RBForwarder) GetReports() <-chan Report {
-	return f.mh.GetReports()
+	return f.r.GetReports()
 }
 
 // GetOrderedReports is the same as GetReports() but the reports are delivered
 // in order
 func (f *RBForwarder) GetOrderedReports() <-chan Report {
-	return f.mh.GetOrderedReports()
+	return f.r.GetOrderedReports()
 }
 
 // Produce is used by the source to send messages to the backend
