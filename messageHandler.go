@@ -6,129 +6,117 @@ import "time"
 // of the pipeline. The first element of the pipeline can know the status
 // of the produced message using GetReports() or GetOrderedReports()
 type messageHandler struct {
-	input         chan *message     // Receive messages
-	freedMessages chan *message     // Messages after its report has been delivered
-	retry         chan *message     // Send messages to retry
-	unordered     chan *message     // Send reports out of order
-	out           chan *message     // Send reports in order
-	close         chan struct{}     // Stop sending reports
+	handler  chan *message // Receive messages from pipeline
+	pipeline chan *message // Send messages back to the pipeline
+	out      chan *message // Send reports to the user
+
 	queued        map[uint64]Report // Store pending reports
 	currentReport uint64            // Last delivered report
 
-	config messageHandlerConfig
+	maxRetries int
+	backoff    int
 }
 
 // newReportHandler creates a new instance of reportHandler
-func newMessageHandler(maxRetries, backoff, queueSize int,
-	retry chan *message) *messageHandler {
+func newMessageHandler(
+	maxRetries, backoff int,
+	handler, pipeline chan *message,
+) *messageHandler {
 
-	return &messageHandler{
-		input:         make(chan *message, queueSize),
-		freedMessages: make(chan *message, queueSize),
-		unordered:     make(chan *message, queueSize),
-		close:         make(chan struct{}),
-		queued:        make(map[uint64]Report),
-		retry:         retry,
-		config: messageHandlerConfig{
-			maxRetries: maxRetries,
-			backoff:    backoff,
-		},
+	mh := &messageHandler{
+		handler:  handler,
+		pipeline: pipeline,
+		out:      make(chan *message, 100),
+
+		queued: make(map[uint64]Report),
+
+		maxRetries: maxRetries,
+		backoff:    backoff,
 	}
-}
 
-// Init initializes the processing of reports
-func (r *messageHandler) Init() {
 	go func() {
-		// Get reports from the input channel
-	forOuterLoop:
-		for {
-			select {
-			case <-r.close:
-				break forOuterLoop
-			case message := <-r.input:
-				// Report when:
-				// - Message has been received successfully
-				// - Retrying has been disabled
-				// - The max number of retries has been reached
-				if message.code == 0 ||
-					r.config.maxRetries == 0 ||
-					(r.config.maxRetries > 0 &&
-						message.retries >= r.config.maxRetries) {
-
-					// Send the report to the client
-					r.unordered <- message
-				} else {
-					// Retry in other case
-					go func() {
-						message.retries++
-						Logger.
-							WithField("Seq", message.seq).
-							WithField("Retry", message.retries).
-							WithField("Status", message.status).
-							WithField("Code", message.code).
-							Warnf("Retrying message")
-
-						<-time.After(time.Duration(r.config.backoff) * time.Second)
-						r.retry <- message
-					}()
-				}
+		// Get reports from the handler channel
+		for m := range mh.handler {
+			// If the message has status code 0 (success) send the report to the user
+			if m.code == 0 || mh.maxRetries == 0 {
+				mh.out <- m
+				continue
 			}
+
+			// If the message has status code != 0 (fail) but has been retried the
+			// maximum number or retries also send it to the user
+			if mh.maxRetries > 0 && m.retries >= mh.maxRetries {
+				mh.out <- m
+				continue
+			}
+
+			// In othe case retry the message sending it again to the pipeline
+			go func(m *message) {
+				m.retries++
+				Logger.
+					WithField("Seq", m.seq).
+					WithField("Retry", m.retries).
+					WithField("Status", m.status).
+					WithField("Code", m.code).
+					Warnf("Retrying message")
+
+				<-time.After(time.Duration(mh.backoff) * time.Second)
+				mh.pipeline <- m
+			}(m)
 		}
-		close(r.unordered)
+
+		close(mh.out)
 	}()
 
-	Logger.Debug("Report Handler ready")
+	Logger.Debug("Message Handler ready")
+
+	return mh
 }
 
-func (r *messageHandler) GetReports() chan Report {
-	done := make(chan struct{})
+func (mh *messageHandler) GetReports() chan Report {
 	reports := make(chan Report)
 
 	go func() {
-		done <- struct{}{}
-
-		for message := range r.unordered {
+		for message := range mh.out {
 			reports <- message.GetReport()
 		}
+
 		close(reports)
 	}()
 
-	<-done
 	return reports
 }
 
-func (r *messageHandler) GetOrderedReports() chan Report {
-	done := make(chan struct{})
+func (mh *messageHandler) GetOrderedReports() chan Report {
 	reports := make(chan Report)
 
 	go func() {
-		done <- struct{}{}
-		for message := range r.unordered {
+		for message := range mh.out {
 			report := message.GetReport()
 
-			if message.seq == r.currentReport {
+			if message.seq == mh.currentReport {
 				// The message is the expected. Send it.
 				reports <- report
-				r.currentReport++
+				mh.currentReport++
 			} else {
 				// This message is not the expected. Store it.
-				r.queued[message.seq] = report
+				mh.queued[message.seq] = report
 			}
 
 			// Check if there are stored messages and send them.
 			for {
-				if currentReport, ok := r.queued[r.currentReport]; ok {
+				if currentReport, ok := mh.queued[mh.currentReport]; ok {
 					reports <- currentReport
-					delete(r.queued, r.currentReport)
-					r.currentReport++
+					delete(mh.queued, mh.currentReport)
+					mh.currentReport++
 				} else {
 					break
 				}
 			}
 		}
+
 		close(reports)
 	}()
 
-	<-done
 	return reports
 }

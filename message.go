@@ -49,11 +49,3 @@ func (m message) GetReport() Report {
 		opts:    m.opts,
 	}
 }
-
-// Done send the report to the report handler so it can be delivered to the
-// user
-func (m *message) Done(code int, status string) {
-	m.code = code
-	m.status = status
-	m.channel <- m
-}

@@ -4,6 +4,5 @@ package pipeline
 type Messenger interface {
 	PopData() ([]byte, error)
 	PushData(data []byte)
-	Done(code int, status string)
 	GetOpt(name string) (interface{}, error)
 }

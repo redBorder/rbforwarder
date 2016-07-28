@@ -167,9 +167,10 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	req, err := http.NewRequest("POST", s.config.URL+"/"+path, batchBuffer.buff)
 	if err != nil {
 		s.logger.Errorf("Error creating request: %s", err.Error())
-		for _, message := range batchBuffer.messages {
-			message.Done(errRequest, err.Error())
-		}
+		// TODO Mark message as done
+		// for _, message := range batchBuffer.messages {
+		// message.Done(errRequest, err.Error())
+		// }
 		return
 	}
 
@@ -181,22 +182,25 @@ func (s *Sender) batchSend(batchBuffer *batchBuffer, path string) {
 	// Send the HTTP POST request
 	res, err := s.client.Do(req)
 	if err != nil {
-		for _, message := range batchBuffer.messages {
-			message.Done(errHTTP, err.Error())
-		}
+		// TODO Mark message as done
+		// for _, message := range batchBuffer.messages {
+		// message.Done(errHTTP, err.Error())
+		// }
 		return
 	}
 	defer res.Body.Close()
 
 	// Send the reports
 	if res.StatusCode >= 400 {
-		for _, message := range batchBuffer.messages {
-			message.Done(errStatus, res.Status)
-		}
+		// TODO Mark message as done
+		// for _, message := range batchBuffer.messages {
+		// message.Done(errStatus, res.Status)
+		// }
 	} else {
-		for _, message := range batchBuffer.messages {
-			message.Done(0, res.Status)
-		}
+		// TODO Mark message as done
+		// for _, message := range batchBuffer.messages {
+		// message.Done(0, res.Status)
+		// }
 	}
 
 	// Statistics

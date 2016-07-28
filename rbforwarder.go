@@ -1,6 +1,9 @@
 package rbforwarder
 
 import (
+	"errors"
+	"sync/atomic"
+
 	"github.com/Sirupsen/logrus"
 	"github.com/redBorder/rbforwarder/pipeline"
 )
@@ -17,34 +20,38 @@ var Logger = logrus.NewEntry(log)
 // send messages and get reports. It has a backend for routing messages between
 // workers
 type RBForwarder struct {
-	backend           *Backend
-	messageHandler    *messageHandler
-	currentProducedID uint64
+	backend        *Backend
+	messageHandler *messageHandler
 
-	config Config
+	currentProducedID uint64
+	working           uint32
+
+	pipeline chan *message // Messages to the backend
+	handler  chan *message // Messages to message handler
 }
 
 // NewRBForwarder creates a new Forwarder object
 func NewRBForwarder(config Config) *RBForwarder {
+	pipeline := make(chan *message, config.QueueSize)
+	handler := make(chan *message, config.QueueSize)
+
 	forwarder := &RBForwarder{
-		backend: NewBackend(config.Workers, config.QueueSize, config.MaxMessages, config.MaxBytes),
-		config:  config,
+		working: 1,
+		backend: NewBackend(pipeline, handler),
+		messageHandler: newMessageHandler(
+			config.Retries,
+			config.Backoff,
+			handler,
+			pipeline,
+		),
+		pipeline: pipeline,
+		handler:  handler,
 	}
 
-	forwarder.messageHandler = newMessageHandler(
-		config.Retries,
-		config.Backoff,
-		config.QueueSize,
-		forwarder.backend.input,
-	)
-
 	fields := logrus.Fields{
-		"workers":      config.Workers,
 		"retries":      config.Retries,
 		"backoff_time": config.Backoff,
 		"queue_size":   config.QueueSize,
-		"max_messages": config.MaxMessages,
-		"max_bytes":    config.MaxBytes,
 	}
 
 	Logger.WithFields(fields).Debug("Initialized rB Forwarder")
@@ -54,18 +61,15 @@ func NewRBForwarder(config Config) *RBForwarder {
 
 // Close stop pending actions
 func (f *RBForwarder) Close() {
-	f.messageHandler.close <- struct{}{}
+	atomic.StoreUint32(&f.working, 0)
+	close(f.backend.input)
 }
 
-// SetSender set a sender on the backend
-func (f *RBForwarder) SetSender(sender pipeline.Sender) {
-	f.backend.sender = sender
-
-	// Start the backend
-	f.backend.Init()
-
-	// Start the report handler
-	f.messageHandler.Init()
+// PushComponents adds a new component to the pipeline
+func (f *RBForwarder) PushComponents(components []pipeline.Composer, w []int) {
+	for i, component := range components {
+		f.backend.PushComponent(component, w[i])
+	}
 }
 
 // GetReports is used by the source to get a report for a sent message.
@@ -82,17 +86,20 @@ func (f *RBForwarder) GetOrderedReports() <-chan Report {
 
 // Produce is used by the source to send messages to the backend
 func (f *RBForwarder) Produce(buf []byte, options map[string]interface{}) error {
+	if atomic.LoadUint32(&f.working) == 0 {
+		return errors.New("Forwarder has been closed")
+	}
+
 	seq := f.currentProducedID
 	f.currentProducedID++
 
 	message := &message{
-		seq:     seq,
-		opts:    options,
-		channel: f.messageHandler.input,
+		seq:  seq,
+		opts: options,
 	}
 
 	message.PushData(buf)
-	f.backend.input <- message
+	f.pipeline <- message
 
 	return nil
 }

@@ -1,8 +1,6 @@
 package rbforwarder
 
 import (
-	"errors"
-	"strconv"
 	"testing"
 
 	"github.com/redBorder/rbforwarder/pipeline"
@@ -10,7 +8,7 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-type MockSender struct {
+type MockComponent struct {
 	mock.Mock
 
 	channel chan string
@@ -19,15 +17,20 @@ type MockSender struct {
 	statusCode int
 }
 
-func (s *MockSender) Init(id int) error {
+func (s *MockComponent) Init(id int) error {
 	args := s.Called(id)
 	return args.Error(0)
 }
 
-func (s *MockSender) OnMessage(m pipeline.Messenger) {
+func (s *MockComponent) OnMessage(
+	m pipeline.Messenger,
+	next pipeline.Next,
+	done pipeline.Done,
+) {
+
 	data, _ := m.PopData()
 	s.channel <- string(data)
-	m.Done(s.statusCode, s.status)
+	done(m, s.statusCode, s.status)
 	s.Called(m)
 }
 
@@ -37,27 +40,30 @@ func TestRBForwarder(t *testing.T) {
 		numWorkers := 10
 		numRetries := 3
 
-		sender := &MockSender{
+		component := &MockComponent{
 			channel: make(chan string, 10000),
 		}
 
 		rbforwarder := NewRBForwarder(Config{
 			Retries:   numRetries,
-			Workers:   numWorkers,
 			QueueSize: numMessages,
 		})
 
 		for i := 0; i < numWorkers; i++ {
-			sender.On("Init", i).Return(nil)
+			component.On("Init", i).Return(nil)
 		}
 
-		rbforwarder.SetSender(sender)
+		var components []pipeline.Composer
+		var instances []int
+		components = append(components, component)
+		instances = append(instances, numWorkers)
+		rbforwarder.PushComponents(components, instances)
 
 		Convey("When a \"Hello World\" message is produced", func() {
-			sender.status = "OK"
-			sender.statusCode = 0
+			component.status = "OK"
+			component.statusCode = 0
 
-			sender.On("OnMessage", mock.MatchedBy(func(m *message) bool {
+			component.On("OnMessage", mock.MatchedBy(func(m *message) bool {
 				opt, err := m.GetOpt("message_id")
 				if err != nil {
 					return false
@@ -79,12 +85,12 @@ func TestRBForwarder(t *testing.T) {
 				So(report.code, ShouldEqual, 0)
 				So(report.status, ShouldEqual, "OK")
 
-				sender.AssertExpectations(t)
+				component.AssertExpectations(t)
 			})
 		})
 
 		Convey("When calling OnMessage() with options", func() {
-			sender.On("OnMessage", mock.MatchedBy(func(m *message) bool {
+			component.On("OnMessage", mock.MatchedBy(func(m *message) bool {
 				_, err := m.GetOpt("nonexistent")
 				return err != nil
 			}))
@@ -99,12 +105,12 @@ func TestRBForwarder(t *testing.T) {
 				So(report.opts, ShouldNotBeNil)
 				So(report.opts, ShouldBeEmpty)
 
-				sender.AssertExpectations(t)
+				component.AssertExpectations(t)
 			})
 		})
 
 		Convey("When calling OnMessage() without options", func() {
-			sender.On("OnMessage", mock.MatchedBy(func(m *message) bool {
+			component.On("OnMessage", mock.MatchedBy(func(m *message) bool {
 				_, err := m.GetOpt("nonexistent")
 				return err != nil
 			}))
@@ -118,15 +124,15 @@ func TestRBForwarder(t *testing.T) {
 
 				So(report.opts, ShouldBeNil)
 
-				sender.AssertExpectations(t)
+				component.AssertExpectations(t)
 			})
 		})
 
 		Convey("When a message fails to send", func() {
-			sender.status = "Fake Error"
-			sender.statusCode = 99
+			component.status = "Fake Error"
+			component.statusCode = 99
 
-			sender.On("OnMessage", mock.MatchedBy(func(m *message) bool {
+			component.On("OnMessage", mock.MatchedBy(func(m *message) bool {
 				opt, err := m.GetOpt("message_id")
 				if err != nil {
 					return false
@@ -149,12 +155,12 @@ func TestRBForwarder(t *testing.T) {
 				So(report.code, ShouldEqual, 99)
 				So(report.retries, ShouldEqual, numRetries)
 
-				sender.AssertExpectations(t)
+				component.AssertExpectations(t)
 			})
 		})
 
 		Convey("When 10000 messages are produced", func() {
-			sender.On("OnMessage", mock.AnythingOfType("*rbforwarder.message")).
+			component.On("OnMessage", mock.AnythingOfType("*rbforwarder.message")).
 				Return(nil).
 				Times(numMessages)
 
@@ -166,9 +172,11 @@ func TestRBForwarder(t *testing.T) {
 				}
 			}
 
+			rbforwarder.Close()
+
 			Convey("10000 messages should be get by the worker", func() {
 				i := 0
-				for range sender.channel {
+				for range component.channel {
 					if i++; i >= numMessages {
 						break
 					} else if i > numMessages {
@@ -178,58 +186,36 @@ func TestRBForwarder(t *testing.T) {
 
 				So(i, ShouldEqual, numMessages)
 
-				i = 0
-				for range rbforwarder.GetReports() {
-					if i++; i >= numMessages {
-						break
-					} else if i > numMessages {
-						t.FailNow()
-					}
-				}
-
-				sender.AssertExpectations(t)
+				component.AssertExpectations(t)
 			})
 
 			Convey("10000 reports should be received", func() {
-				i := 0
-				for range rbforwarder.GetReports() {
-					if i++; i == numMessages {
-						break
-					} else if i > numMessages {
-						t.FailNow()
-					}
+				reports := 0
+				for range rbforwarder.messageHandler.GetReports() {
+					reports++
 				}
 
-				So(i, ShouldEqual, numMessages)
+				So(reports, ShouldEqual, numMessages)
 
-				sender.AssertExpectations(t)
+				component.AssertExpectations(t)
 			})
 
 			Convey("10000 reports should be received in order", func() {
-				i := 0
-				var err error
+				ordered := true
+				messages := 0
 
 				for report := range rbforwarder.GetOrderedReports() {
-					if report.opts["message_id"] != i {
-						err = errors.New("Unexpected report: " +
-							strconv.Itoa(report.opts["message_id"].(int)))
+					if report.opts["message_id"] != messages {
+						ordered = false
 					}
-					if i++; i >= numMessages {
-						break
-					} else if i > numMessages {
-						t.FailNow()
-					}
+					messages++
 				}
 
-				So(err, ShouldBeNil)
-				So(i, ShouldEqual, numMessages)
+				So(ordered, ShouldBeTrue)
+				So(messages, ShouldEqual, numMessages)
 
-				sender.AssertExpectations(t)
+				component.AssertExpectations(t)
 			})
-		})
-
-		Reset(func() {
-			rbforwarder.Close()
 		})
 	})
 }
