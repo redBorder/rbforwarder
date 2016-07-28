@@ -15,12 +15,14 @@ script:
   - $HOME/gopath/bin/goveralls
 
 install:
-- make get
-- make get_dev
+  - go get github.com/mattn/goveralls
+  - go get github.com/go-playground/overalls
+  - go get -t ./...
 
 script:
-#- make check
-- make test
+  - go test -v -race -cover ./...
 
-after_script:
-- make coverage
+after_success:
+  - overalls -covermode=set -project=github.com/redBorder/rbforwarder
+  - go tool cover -func overalls.coverprofile
+  - goveralls -coverprofile=overalls.coverprofile -service=travis-ci
