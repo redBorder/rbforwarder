@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redBorder/rbforwarder/pipeline"
+	"github.com/redBorder/rbforwarder/types"
 )
 
 type batchBuffer struct {
@@ -15,5 +15,5 @@ type batchBuffer struct {
 	timer        *time.Timer
 	mutex        *sync.Mutex
 	messageCount int64
-	messages     []pipeline.Messenger
+	messages     []types.Messenger
 }

@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/redBorder/rbforwarder/pipeline"
+	"github.com/redBorder/rbforwarder/types"
 )
 
 // Version is the current tag
@@ -66,7 +66,7 @@ func (f *RBForwarder) Close() {
 }
 
 // PushComponents adds a new component to the pipeline
-func (f *RBForwarder) PushComponents(components []pipeline.Composer, w []int) {
+func (f *RBForwarder) PushComponents(components []types.Composer, w []int) {
 	for i, component := range components {
 		f.backend.PushComponent(component, w[i])
 	}

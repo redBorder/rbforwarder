@@ -1,4 +1,4 @@
-package pipeline
+package types
 
 // Next should be called by a component in order to pass the message to the next
 // component in the pipeline.

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/redBorder/rbforwarder/pipeline"
+	"github.com/redBorder/rbforwarder/types"
 )
 
 // Sender receives data from pipe and send it via HTTP to an endpoint
@@ -59,7 +59,7 @@ func (s *Sender) Init(id int) error {
 
 // OnMessage stores a message received from the pipeline into a buffer to perform
 // batching.
-func (s *Sender) OnMessage(message pipeline.Messenger) error {
+func (s *Sender) OnMessage(message types.Messenger) error {
 
 	// logger.Printf("[%d] Sending message ID: [%d]", s.id, message)
 

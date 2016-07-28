@@ -3,7 +3,7 @@ package rbforwarder
 import (
 	"testing"
 
-	"github.com/redBorder/rbforwarder/pipeline"
+	"github.com/redBorder/rbforwarder/types"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/mock"
 )
@@ -18,9 +18,9 @@ func (c *MockMiddleComponent) Init(id int) error {
 }
 
 func (c *MockMiddleComponent) OnMessage(
-	m pipeline.Messenger,
-	next pipeline.Next,
-	done pipeline.Done,
+	m types.Messenger,
+	next types.Next,
+	done types.Done,
 ) {
 	data, _ := m.PopData()
 	processedData := "-> [" + string(data) + "] <-"
@@ -45,9 +45,9 @@ func (c *MockComponent) Init(id int) error {
 }
 
 func (c *MockComponent) OnMessage(
-	m pipeline.Messenger,
-	next pipeline.Next,
-	done pipeline.Done,
+	m types.Messenger,
+	next types.Next,
+	done types.Done,
 ) {
 
 	data, _ := m.PopData()
@@ -75,7 +75,7 @@ func TestRBForwarder(t *testing.T) {
 			component.On("Init", i).Return(nil)
 		}
 
-		var components []pipeline.Composer
+		var components []types.Composer
 		var instances []int
 		components = append(components, component)
 		instances = append(instances, numWorkers)
@@ -271,7 +271,7 @@ func TestRBForwarder(t *testing.T) {
 			component2.On("Init", i).Return(nil)
 		}
 
-		var components []pipeline.Composer
+		var components []types.Composer
 		var instances []int
 
 		components = append(components, component1)

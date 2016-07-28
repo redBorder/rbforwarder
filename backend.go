@@ -3,7 +3,7 @@ package rbforwarder
 import (
 	"time"
 
-	"github.com/redBorder/rbforwarder/pipeline"
+	"github.com/redBorder/rbforwarder/types"
 )
 
 // Backend orchestrates the pipeline
@@ -57,7 +57,7 @@ func NewBackend(input, output chan *message) *Backend {
 }
 
 // PushComponent adds a new component to the pipeline
-func (b *Backend) PushComponent(c pipeline.Composer, w int) {
+func (b *Backend) PushComponent(c types.Composer, w int) {
 	index := len(b.componentPools)
 	componentPool := make(chan chan *message, w)
 	b.componentPools = append(b.componentPools, componentPool)
@@ -72,13 +72,13 @@ func (b *Backend) PushComponent(c pipeline.Composer, w int) {
 			for m := range worker {
 				c.OnMessage(
 					m,
-					func(m pipeline.Messenger) {
+					func(m types.Messenger) {
 						if len(b.componentPools) >= index {
 							nextWorker := <-b.componentPools[index+1]
 							nextWorker <- m.(*message)
 						}
 					},
-					func(m pipeline.Messenger, code int, status string) {
+					func(m types.Messenger, code int, status string) {
 						rbmessage := m.(*message)
 						rbmessage.code = code
 						rbmessage.status = status
