@@ -39,7 +39,7 @@ func NewBackend(input, output chan *message) *Backend {
 				select {
 				case worker := <-componentPool:
 					close(worker)
-				case <-time.After(10 * time.Millisecond):
+				case <-time.After(2000 * time.Millisecond):
 					break loop
 				}
 			}
