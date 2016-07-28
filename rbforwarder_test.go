@@ -221,7 +221,7 @@ func TestRBForwarder(t *testing.T) {
 
 			Convey("10000 reports should be received", func() {
 				reports := 0
-				for range rbforwarder.messageHandler.GetReports() {
+				for range rbforwarder.GetReports() {
 					reports++
 				}
 
@@ -317,7 +317,7 @@ func TestRBForwarder(t *testing.T) {
 
 			Convey("\"Hello World\" message should be processed by the pipeline", func() {
 				reports := 0
-				for report := range rbforwarder.messageHandler.GetReports() {
+				for report := range rbforwarder.GetReports() {
 					reports++
 
 					So(report.opts["message_id"], ShouldEqual, "test123")

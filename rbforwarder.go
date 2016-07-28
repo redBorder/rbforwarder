@@ -20,32 +20,27 @@ var Logger = logrus.NewEntry(log)
 // send messages and get reports. It has a backend for routing messages between
 // workers
 type RBForwarder struct {
-	backend        *Backend
-	messageHandler *messageHandler
+	p  *pipeline
+	mh *messageHandler
 
 	currentProducedID uint64
 	working           uint32
-
-	pipeline chan *message // Messages to the backend
-	handler  chan *message // Messages to message handler
 }
 
 // NewRBForwarder creates a new Forwarder object
 func NewRBForwarder(config Config) *RBForwarder {
-	pipeline := make(chan *message, config.QueueSize)
-	handler := make(chan *message, config.QueueSize)
+	pipelineChan := make(chan *message, config.QueueSize)
+	handlerChan := make(chan *message, config.QueueSize)
 
 	forwarder := &RBForwarder{
 		working: 1,
-		backend: NewBackend(pipeline, handler),
-		messageHandler: newMessageHandler(
+		p:       newPipeline(pipelineChan, handlerChan),
+		mh: newMessageHandler(
 			config.Retries,
 			config.Backoff,
-			handler,
-			pipeline,
+			handlerChan,
+			pipelineChan,
 		),
-		pipeline: pipeline,
-		handler:  handler,
 	}
 
 	fields := logrus.Fields{
@@ -62,26 +57,26 @@ func NewRBForwarder(config Config) *RBForwarder {
 // Close stop pending actions
 func (f *RBForwarder) Close() {
 	atomic.StoreUint32(&f.working, 0)
-	close(f.backend.input)
+	close(f.p.input)
 }
 
 // PushComponents adds a new component to the pipeline
 func (f *RBForwarder) PushComponents(components []types.Composer, w []int) {
 	for i, component := range components {
-		f.backend.PushComponent(component, w[i])
+		f.p.PushComponent(component, w[i])
 	}
 }
 
 // GetReports is used by the source to get a report for a sent message.
 // Reports are delivered on the same order that was sent
 func (f *RBForwarder) GetReports() <-chan Report {
-	return f.messageHandler.GetReports()
+	return f.mh.GetReports()
 }
 
 // GetOrderedReports is the same as GetReports() but the reports are delivered
 // in order
 func (f *RBForwarder) GetOrderedReports() <-chan Report {
-	return f.messageHandler.GetOrderedReports()
+	return f.mh.GetOrderedReports()
 }
 
 // Produce is used by the source to send messages to the backend
@@ -99,7 +94,7 @@ func (f *RBForwarder) Produce(buf []byte, options map[string]interface{}) error 
 	}
 
 	message.PushData(buf)
-	f.pipeline <- message
+	f.p.input <- message
 
 	return nil
 }
