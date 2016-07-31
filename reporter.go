@@ -1,32 +1,37 @@
 package rbforwarder
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 // reporter is used to handle the reports produced by the last element
 // of the pipeline. The first element of the pipeline can know the status
 // of the produced message using GetReports() or GetOrderedReports()
 type reporter struct {
-	input    chan *message // Receive messages from pipeline
-	pipeline chan *message // Send messages back to the pipeline
-	out      chan *message // Send reports to the user
+	input   chan *message // Receive messages from pipeline
+	retries chan *message // Send messages back to the pipeline
+	out     chan *message // Send reports to the user
 
 	queued        map[uint64]Report // Store pending reports
 	currentReport uint64            // Last delivered report
 
 	maxRetries int
 	backoff    int
+
+	wg sync.WaitGroup
 }
 
 // newReportHandler creates a new instance of reportHandler
 func newReporter(
 	maxRetries, backoff int,
-	input, pipeline chan *message,
+	input, retries chan *message,
 ) *reporter {
 
 	r := &reporter{
-		input:    input,
-		pipeline: pipeline,
-		out:      make(chan *message, 100),
+		input:   input,
+		retries: retries,
+		out:     make(chan *message, 100), // NOTE Temp channel size
 
 		queued: make(map[uint64]Report),
 
@@ -51,20 +56,17 @@ func newReporter(
 			}
 
 			// In othe case retry the message sending it again to the pipeline
+			r.wg.Add(1)
 			go func(m *message) {
+				defer r.wg.Done()
 				m.retries++
-				Logger.
-					WithField("Seq", m.seq).
-					WithField("Retry", m.retries).
-					WithField("Status", m.status).
-					WithField("Code", m.code).
-					Warnf("Retrying message")
-
 				<-time.After(time.Duration(r.backoff) * time.Second)
-				r.pipeline <- m
+				r.retries <- m
 			}(m)
 		}
 
+		r.wg.Wait()
+		close(r.retries)
 		close(r.out)
 	}()
 

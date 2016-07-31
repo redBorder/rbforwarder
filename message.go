@@ -33,12 +33,8 @@ func (m *message) PopData() (ret []byte, err error) {
 }
 
 // GetOpt returns an option
-func (m message) GetOpt(name string) (opt interface{}, err error) {
-	if opt = m.opts[name]; opt == nil {
-		err = errors.New("No option available: " + name)
-	}
-
-	return
+func (m message) GetOpt(name string) interface{} {
+	return m.opts[name]
 }
 
 func (m message) GetReport() Report {

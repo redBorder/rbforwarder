@@ -1,96 +1,102 @@
 package rbforwarder
 
 import (
-	"sync/atomic"
-	"time"
+	"sync"
 
 	"github.com/redBorder/rbforwarder/types"
 )
 
+type component struct {
+	pool    chan chan *message
+	workers int
+}
+
 // pipeline contains the components
 type pipeline struct {
-	componentPools []chan chan *message
-	input          chan *message
-	output         chan *message
-
-	working int32
+	components []component
+	input      chan *message
+	retry      chan *message
+	output     chan *message
 }
 
 // newPipeline creates a new Backend
-func newPipeline(input, output chan *message) *pipeline {
+func newPipeline(input, retry, output chan *message) *pipeline {
+	var wg sync.WaitGroup
 	p := &pipeline{
-		input:   input,
-		output:  output,
-		working: 1,
+		input:  input,
+		retry:  retry,
+		output: output,
 	}
 
+	wg.Add(1)
 	go func() {
-		// Start receiving messages
-		for m := range p.input {
-			worker := <-p.componentPools[0]
-			worker <- m
-		}
+		wg.Done()
 
-		// When a close signal is received clean the workers. Wait for workers to
-		// terminate
-		atomic.StoreInt32(&p.working, 0)
-		for _, componentPool := range p.componentPools {
-		loop:
-			for {
-				select {
-				case worker := <-componentPool:
-					close(worker)
-				case <-time.After(2000 * time.Millisecond):
-					break loop
+		for {
+			select {
+			case m, ok := <-p.input:
+				// If input channel has been closed, close output channel
+				if !ok {
+					for _, component := range p.components {
+						for i := 0; i < component.workers; i++ {
+							worker := <-component.pool
+							close(worker)
+						}
+					}
+					close(p.output)
+				} else {
+					worker := <-p.components[0].pool
+					worker <- m
 				}
+
+			case m := <-p.retry:
+				worker := <-p.components[0].pool
+				worker <- m
 			}
 		}
-
-		// Messages coming too late will be ignored. If the channel is not set to
-		// nil, late messages will panic
-		p.output = nil
-
-		// Send a close signal to message handler
-		close(output)
 	}()
 
+	wg.Wait()
 	return p
 }
 
 // PushComponent adds a new component to the pipeline
-func (p *pipeline) PushComponent(c types.Composer, w int) {
-	index := len(p.componentPools)
-	componentPool := make(chan chan *message, w)
-	p.componentPools = append(p.componentPools, componentPool)
+func (p *pipeline) PushComponent(composser types.Composer, w int) {
+	var wg sync.WaitGroup
+	c := component{
+		workers: w,
+		pool:    make(chan chan *message, w),
+	}
+
+	index := len(p.components)
+	p.components = append(p.components, c)
 
 	for i := 0; i < w; i++ {
-		c.Init(i)
+		composser.Init(i)
 
 		worker := make(chan *message)
-		p.componentPools[index] <- worker
+		p.components[index].pool <- worker
 
-		go func() {
+		wg.Add(1)
+		go func(i int) {
+			wg.Done()
 			for m := range worker {
-				c.OnMessage(
-					m,
-					func(m types.Messenger) {
-						if len(p.componentPools) >= index {
-							nextWorker := <-p.componentPools[index+1]
-							nextWorker <- m.(*message)
-						}
-					},
-					func(m types.Messenger, code int, status string) {
-						rbmessage := m.(*message)
-						rbmessage.code = code
-						rbmessage.status = status
-						p.output <- rbmessage
-					},
-				)
+				composser.OnMessage(m, func(m types.Messenger) {
+					if len(p.components) >= index {
+						nextWorker := <-p.components[index+1].pool
+						nextWorker <- m.(*message)
+					}
+				}, func(m types.Messenger, code int, status string) {
+					rbmessage := m.(*message)
+					rbmessage.code = code
+					rbmessage.status = status
+					p.output <- rbmessage
+				})
 
-				if atomic.LoadInt32(&p.working) == 1 {
-					p.componentPools[index] <- worker
-				}
+				p.components[index].pool <- worker
 			}
-		}()
+		}(i)
 	}
+
+	wg.Wait()
 }

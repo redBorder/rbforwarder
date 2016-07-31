@@ -4,5 +4,5 @@ package types
 type Messenger interface {
 	PopData() ([]byte, error)
 	PushData(data []byte)
-	GetOpt(name string) (interface{}, error)
+	GetOpt(name string) interface{}
 }

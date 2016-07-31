@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/zlib"
 	"crypto/tls"
+	"errors"
 	"net/http"
 	"sync"
 	"time"
@@ -64,10 +65,10 @@ func (s *Sender) OnMessage(message types.Messenger) error {
 	// logger.Printf("[%d] Sending message ID: [%d]", s.id, message)
 
 	// We can send batch only for messages with the same path
-	var path string
-
-	if opt, err := message.GetOpt(s.config.Endpoint); err == nil {
-		path = opt.(string)
+	opt := message.GetOpt(s.config.Endpoint)
+	path, ok := opt.(string)
+	if !ok {
+		return errors.New("Can't get path from message opts")
 	}
 
 	// Initialize buffer for path

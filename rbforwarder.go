@@ -29,17 +29,18 @@ type RBForwarder struct {
 
 // NewRBForwarder creates a new Forwarder object
 func NewRBForwarder(config Config) *RBForwarder {
-	pipelineChan := make(chan *message, config.QueueSize)
-	handlerChan := make(chan *message, config.QueueSize)
+	produces := make(chan *message, config.QueueSize)
+	retries := make(chan *message, config.QueueSize)
+	reports := make(chan *message, config.QueueSize)
 
-	forwarder := &RBForwarder{
+	f := &RBForwarder{
 		working: 1,
-		p:       newPipeline(pipelineChan, handlerChan),
+		p:       newPipeline(produces, retries, reports),
 		r: newReporter(
 			config.Retries,
 			config.Backoff,
-			handlerChan,
-			pipelineChan,
+			reports,
+			retries,
 		),
 	}
 
@@ -51,10 +52,10 @@ func NewRBForwarder(config Config) *RBForwarder {
 
 	Logger.WithFields(fields).Debug("Initialized rB Forwarder")
 
-	return forwarder
+	return f
 }
 
-// Close stop pending actions
+// Close stops pending actions
 func (f *RBForwarder) Close() {
 	atomic.StoreUint32(&f.working, 0)
 	close(f.p.input)
