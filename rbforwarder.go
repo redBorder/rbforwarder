@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/oleiade/lane"
 	"github.com/redBorder/rbforwarder/types"
 )
 
@@ -91,10 +92,12 @@ func (f *RBForwarder) Produce(buf []byte, options map[string]interface{}) error 
 
 	message := &message{
 		seq:  seq,
-		opts: options,
+		opts: lane.NewStack(),
 	}
 
 	message.PushData(buf)
+	message.opts.Push(options)
+
 	f.p.input <- message
 
 	return nil

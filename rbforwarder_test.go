@@ -85,18 +85,8 @@ func TestRBForwarder(t *testing.T) {
 		Convey("When a \"Hello World\" message is produced", func() {
 			component.status = "OK"
 			component.statusCode = 0
-			closed := false
 
-			component.On("OnMessage", mock.MatchedBy(func(m *message) bool {
-				opt := m.GetOpt("message_id")
-
-				if !closed {
-					rbforwarder.Close()
-					closed = true
-				}
-
-				return opt.(string) == "test123"
-			})).Times(1)
+			component.On("OnMessage", mock.AnythingOfType("*rbforwarder.message")).Times(1)
 
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
@@ -109,6 +99,7 @@ func TestRBForwarder(t *testing.T) {
 				for report := range rbforwarder.GetReports() {
 					reports++
 					lastReport = report
+					rbforwarder.Close()
 				}
 
 				So(lastReport, ShouldNotBeNil)
@@ -116,7 +107,6 @@ func TestRBForwarder(t *testing.T) {
 				So(lastReport.opts["message_id"], ShouldEqual, "test123")
 				So(lastReport.code, ShouldEqual, 0)
 				So(lastReport.status, ShouldEqual, "OK")
-
 				So(err, ShouldBeNil)
 
 				component.AssertExpectations(t)
@@ -199,25 +189,15 @@ func TestRBForwarder(t *testing.T) {
 		Convey("When a message fails to send", func() {
 			component.status = "Fake Error"
 			component.statusCode = 99
-			closed := false
 
-			component.On("OnMessage", mock.MatchedBy(func(m *message) bool {
-				opt := m.GetOpt("message_id")
-
-				if m.retries >= 3 && !closed {
-					closed = true
-					rbforwarder.Close()
-				}
-
-				return opt.(string) == "test123"
-			})).Times(4)
+			component.On("OnMessage", mock.AnythingOfType("*rbforwarder.message")).Times(4)
 
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
 				map[string]interface{}{"message_id": "test123"},
 			)
 
-			Convey("The message should be retried\n", func() {
+			Convey("The message should be retried", func() {
 				So(err, ShouldBeNil)
 
 				var reports int
@@ -225,6 +205,7 @@ func TestRBForwarder(t *testing.T) {
 				for report := range rbforwarder.GetReports() {
 					reports++
 					lastReport = report
+					rbforwarder.Close()
 				}
 
 				So(lastReport, ShouldNotBeNil)
@@ -328,15 +309,8 @@ func TestRBForwarder(t *testing.T) {
 			component2.status = "OK"
 			component2.statusCode = 0
 
-			component1.On("OnMessage", mock.MatchedBy(func(m *message) bool {
-				opt := m.GetOpt("message_id")
-				return opt.(string) == "test123"
-			}))
-
-			component2.On("OnMessage", mock.MatchedBy(func(m *message) bool {
-				opt := m.GetOpt("message_id")
-				return opt.(string) == "test123"
-			}))
+			component1.On("OnMessage", mock.AnythingOfType("*rbforwarder.message"))
+			component2.On("OnMessage", mock.AnythingOfType("*rbforwarder.message"))
 
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
