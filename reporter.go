@@ -80,7 +80,9 @@ func (r *reporter) GetReports() chan Report {
 
 	go func() {
 		for message := range r.out {
-			reports <- message.GetReport()
+			for _, report := range message.GetReports() {
+				reports <- report
+			}
 		}
 
 		close(reports)
@@ -94,25 +96,25 @@ func (r *reporter) GetOrderedReports() chan Report {
 
 	go func() {
 		for message := range r.out {
-			report := message.GetReport()
-
-			if message.seq == r.currentReport {
-				// The message is the expected. Send it.
-				reports <- report
-				r.currentReport++
-			} else {
-				// This message is not the expected. Store it.
-				r.queued[message.seq] = report
-			}
-
-			// Check if there are stored messages and send them.
-			for {
-				if currentReport, ok := r.queued[r.currentReport]; ok {
-					reports <- currentReport
-					delete(r.queued, r.currentReport)
+			for _, report := range message.GetReports() {
+				if message.seq == r.currentReport {
+					// The message is the expected. Send it.
+					reports <- report
 					r.currentReport++
 				} else {
-					break
+					// This message is not the expected. Store it.
+					r.queued[message.seq] = report
+				}
+
+				// Check if there are stored messages and send them.
+				for {
+					if currentReport, ok := r.queued[r.currentReport]; ok {
+						reports <- currentReport
+						delete(r.queued, r.currentReport)
+						r.currentReport++
+					} else {
+						break
+					}
 				}
 			}
 		}
