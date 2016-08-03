@@ -25,7 +25,8 @@ func (c *MockMiddleComponent) OnMessage(
 	c.Called(m)
 	data, _ := m.PopData()
 	processedData := "-> [" + string(data) + "] <-"
-	m.PushData([]byte(processedData))
+	message := m.(*message)
+	message.PushData([]byte(processedData))
 	next(m)
 
 }

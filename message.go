@@ -36,6 +36,17 @@ func (m *message) PopData() (ret []byte, err error) {
 	return
 }
 
+// PopData get the data stored by the previous handler
+func (m *message) PopOpts() (ret map[string]interface{}, err error) {
+	if m.opts.Empty() {
+		err = errors.New("Empty stack")
+		return
+	}
+	ret = m.opts.Pop().(map[string]interface{})
+
+	return
+}
+
 func (m message) GetReports() []Report {
 	var reports []Report
 
