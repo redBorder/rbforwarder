@@ -34,7 +34,7 @@ func (m *message) PopData() (ret []byte, err error) {
 	}
 
 	if m.payload.Empty() {
-		err = errors.New("Empty stack")
+		err = errors.New("No data")
 		return
 	}
 
@@ -50,7 +50,7 @@ func (m *message) PopOpts() (ret map[string]interface{}, err error) {
 	}
 
 	if m.opts.Empty() {
-		err = errors.New("Empty stack")
+		err = errors.New("No options")
 		return
 	}
 
