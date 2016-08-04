@@ -4,4 +4,5 @@ package types
 type Messenger interface {
 	PopData() ([]byte, error)
 	PopOpts() (map[string]interface{}, error)
+	Reports() []Reporter
 }

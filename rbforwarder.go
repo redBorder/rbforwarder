@@ -22,7 +22,7 @@ var Logger = logrus.NewEntry(log)
 // workers
 type RBForwarder struct {
 	p *pipeline
-	r *reporter
+	r *reportHandler
 
 	currentProducedID uint64
 	working           uint32
@@ -71,13 +71,13 @@ func (f *RBForwarder) PushComponents(components []types.Composer, w []int) {
 
 // GetReports is used by the source to get a report for a sent message.
 // Reports are delivered on the same order that was sent
-func (f *RBForwarder) GetReports() <-chan Report {
+func (f *RBForwarder) GetReports() <-chan types.Reporter {
 	return f.r.GetReports()
 }
 
 // GetOrderedReports is the same as GetReports() but the reports are delivered
 // in order
-func (f *RBForwarder) GetOrderedReports() <-chan Report {
+func (f *RBForwarder) GetOrderedReports() <-chan types.Reporter {
 	return f.r.GetOrderedReports()
 }
 
