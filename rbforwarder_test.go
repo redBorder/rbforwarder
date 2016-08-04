@@ -95,11 +95,11 @@ func TestRBForwarder(t *testing.T) {
 			)
 
 			Convey("\"Hello World\" message should be get by the worker", func() {
-				var lastReport Report
+				var lastReport report
 				var reports int
-				for report := range rbforwarder.GetReports() {
+				for r := range rbforwarder.GetReports() {
 					reports++
-					lastReport = report
+					lastReport = r.(report)
 					rbforwarder.Close()
 				}
 
@@ -143,8 +143,8 @@ func TestRBForwarder(t *testing.T) {
 
 			Convey("Should be possible to read an option", func() {
 				for report := range rbforwarder.GetReports() {
-					So(report.opts, ShouldNotBeNil)
-					So(report.opts["option"], ShouldEqual, "example_option")
+					So(report.GetOpts(), ShouldNotBeNil)
+					So(report.GetOpts()["option"], ShouldEqual, "example_option")
 				}
 
 				So(err, ShouldBeNil)
@@ -153,8 +153,8 @@ func TestRBForwarder(t *testing.T) {
 
 			Convey("Should not be possible to read an nonexistent option", func() {
 				for report := range rbforwarder.GetReports() {
-					So(report.opts, ShouldNotBeNil)
-					So(report.opts["invalid"], ShouldBeEmpty)
+					So(report.GetOpts(), ShouldNotBeNil)
+					So(report.GetOpts()["invalid"], ShouldBeEmpty)
 				}
 
 				So(err, ShouldBeNil)
@@ -177,7 +177,7 @@ func TestRBForwarder(t *testing.T) {
 			Convey("Should not be possible to read the option", func() {
 				for report := range rbforwarder.GetReports() {
 					So(err, ShouldBeNil)
-					So(report.opts, ShouldBeNil)
+					So(report.GetOpts(), ShouldBeNil)
 				}
 
 				So(err, ShouldBeNil)
@@ -202,10 +202,10 @@ func TestRBForwarder(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				var reports int
-				var lastReport Report
-				for report := range rbforwarder.GetReports() {
+				var lastReport report
+				for r := range rbforwarder.GetReports() {
 					reports++
-					lastReport = report
+					lastReport = r.(report)
 					rbforwarder.Close()
 				}
 
@@ -257,7 +257,7 @@ func TestRBForwarder(t *testing.T) {
 				var reports int
 
 				for report := range rbforwarder.GetOrderedReports() {
-					if report.opts["message_id"] != reports {
+					if report.GetOpts()["message_id"] != reports {
 						ordered = false
 					}
 					reports++
@@ -325,9 +325,10 @@ func TestRBForwarder(t *testing.T) {
 				for report := range rbforwarder.GetReports() {
 					reports++
 
-					So(report.opts["message_id"], ShouldEqual, "test123")
-					So(report.code, ShouldEqual, 0)
-					So(report.status, ShouldEqual, "OK")
+					So(report.GetOpts()["message_id"], ShouldEqual, "test123")
+					code, status, _ := report.Status()
+					So(code, ShouldEqual, 0)
+					So(status, ShouldEqual, "OK")
 				}
 
 				m := <-component2.channel

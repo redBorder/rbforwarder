@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/oleiade/lane"
+	"github.com/redBorder/rbforwarder/types"
 )
 
 // message is used to send data through the pipeline
@@ -27,31 +28,41 @@ func (m *message) PushData(v []byte) {
 
 // PopData get the data stored by the previous handler
 func (m *message) PopData() (ret []byte, err error) {
+	if m.payload == nil {
+		err = errors.New("Uninitialized payload")
+		return
+	}
+
 	if m.payload.Empty() {
 		err = errors.New("Empty stack")
 		return
 	}
-	ret = m.payload.Pop().([]byte)
 
+	ret = m.payload.Pop().([]byte)
 	return
 }
 
 // PopData get the data stored by the previous handler
 func (m *message) PopOpts() (ret map[string]interface{}, err error) {
+	if m.opts == nil {
+		err = errors.New("Uninitialized options")
+		return
+	}
+
 	if m.opts.Empty() {
 		err = errors.New("Empty stack")
 		return
 	}
-	ret = m.opts.Pop().(map[string]interface{})
 
+	ret = m.opts.Pop().(map[string]interface{})
 	return
 }
 
-func (m message) GetReports() []Report {
-	var reports []Report
+func (m message) Reports() []types.Reporter {
+	var reports []types.Reporter
 
 	for !m.opts.Empty() {
-		reports = append(reports, Report{
+		reports = append(reports, report{
 			code:    m.code,
 			status:  m.status,
 			retries: m.retries,

@@ -3,18 +3,20 @@ package rbforwarder
 import (
 	"sync"
 	"time"
+
+	"github.com/redBorder/rbforwarder/types"
 )
 
-// reporter is used to handle the reports produced by the last element
+// reportHandler is used to handle the reports produced by the last element
 // of the pipeline. The first element of the pipeline can know the status
 // of the produced message using GetReports() or GetOrderedReports()
-type reporter struct {
+type reportHandler struct {
 	input   chan *message // Receive messages from pipeline
 	retries chan *message // Send messages back to the pipeline
 	out     chan *message // Send reports to the user
 
-	queued        map[uint64]Report // Store pending reports
-	currentReport uint64            // Last delivered report
+	queued        map[uint64]types.Reporter // Store pending reports
+	currentReport uint64                    // Last delivered report
 
 	maxRetries int
 	backoff    int
@@ -26,14 +28,14 @@ type reporter struct {
 func newReporter(
 	maxRetries, backoff int,
 	input, retries chan *message,
-) *reporter {
+) *reportHandler {
 
-	r := &reporter{
+	r := &reportHandler{
 		input:   input,
 		retries: retries,
 		out:     make(chan *message, 100), // NOTE Temp channel size
 
-		queued: make(map[uint64]Report),
+		queued: make(map[uint64]types.Reporter),
 
 		maxRetries: maxRetries,
 		backoff:    backoff,
@@ -75,12 +77,12 @@ func newReporter(
 	return r
 }
 
-func (r *reporter) GetReports() chan Report {
-	reports := make(chan Report)
+func (r *reportHandler) GetReports() chan types.Reporter {
+	reports := make(chan types.Reporter)
 
 	go func() {
 		for message := range r.out {
-			for _, report := range message.GetReports() {
+			for _, report := range message.Reports() {
 				reports <- report
 			}
 		}
@@ -91,12 +93,12 @@ func (r *reporter) GetReports() chan Report {
 	return reports
 }
 
-func (r *reporter) GetOrderedReports() chan Report {
-	reports := make(chan Report)
+func (r *reportHandler) GetOrderedReports() chan types.Reporter {
+	reports := make(chan types.Reporter)
 
 	go func() {
 		for message := range r.out {
-			for _, report := range message.GetReports() {
+			for _, report := range message.Reports() {
 				if message.seq == r.currentReport {
 					// The message is the expected. Send it.
 					reports <- report
