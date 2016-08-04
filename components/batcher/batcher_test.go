@@ -44,7 +44,7 @@ func (m *TestMessage) Reports() []types.Reporter {
 	return nil
 }
 
-func TestRBForwarder(t *testing.T) {
+func TestBatcher(t *testing.T) {
 	Convey("Given a batcher", t, func() {
 		batcher := &Batcher{config: Config{
 			TimeoutMillis:     1000,
