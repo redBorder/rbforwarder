@@ -3,24 +3,25 @@ package rbforwarder
 import (
 	"sync"
 
+	"github.com/oleiade/lane"
 	"github.com/redBorder/rbforwarder/types"
 )
 
 type component struct {
-	pool    chan chan *message
+	pool    chan chan *types.Message
 	workers int
 }
 
 // pipeline contains the components
 type pipeline struct {
 	components []component
-	input      chan *message
-	retry      chan *message
-	output     chan *message
+	input      chan *types.Message
+	retry      chan *types.Message
+	output     chan *types.Message
 }
 
 // newPipeline creates a new Backend
-func newPipeline(input, retry, output chan *message) *pipeline {
+func newPipeline(input, retry, output chan *types.Message) *pipeline {
 	var wg sync.WaitGroup
 	p := &pipeline{
 		input:  input,
@@ -65,7 +66,7 @@ func (p *pipeline) PushComponent(composser types.Composer, w int) {
 	var wg sync.WaitGroup
 	c := component{
 		workers: w,
-		pool:    make(chan chan *message, w),
+		pool:    make(chan chan *types.Message, w),
 	}
 
 	index := len(p.components)
@@ -74,23 +75,29 @@ func (p *pipeline) PushComponent(composser types.Composer, w int) {
 	for i := 0; i < w; i++ {
 		composser.Init(i)
 
-		worker := make(chan *message)
+		worker := make(chan *types.Message)
 		p.components[index].pool <- worker
 
 		wg.Add(1)
 		go func(i int) {
 			wg.Done()
 			for m := range worker {
-				composser.OnMessage(m, func(m types.Messenger) {
+				composser.OnMessage(m, func(m *types.Message) {
 					if len(p.components) >= index {
 						nextWorker := <-p.components[index+1].pool
-						nextWorker <- m.(*message)
+						nextWorker <- m
 					}
-				}, func(m types.Messenger, code int, status string) {
-					rbmessage := m.(*message)
-					rbmessage.code = code
-					rbmessage.status = status
-					p.output <- rbmessage
+				}, func(m *types.Message, code int, status string) {
+					reports := lane.NewStack()
+					for !m.Reports.Empty() {
+						rep := m.Reports.Pop().(report)
+						rep.code = code
+						rep.status = status
+						reports.Push(rep)
+					}
+
+					m.Reports = reports
+					p.output <- m
 				})
 
 				p.components[index].pool <- worker

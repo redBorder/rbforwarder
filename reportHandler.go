@@ -11,12 +11,12 @@ import (
 // of the pipeline. The first element of the pipeline can know the status
 // of the produced message using GetReports() or GetOrderedReports()
 type reportHandler struct {
-	input   chan *message // Receive messages from pipeline
-	retries chan *message // Send messages back to the pipeline
-	out     chan *message // Send reports to the user
+	input   chan *types.Message // Receive messages from pipeline
+	retries chan *types.Message // Send messages back to the pipeline
+	out     chan *types.Message // Send reports to the user
 
-	queued        map[uint64]types.Reporter // Store pending reports
-	currentReport uint64                    // Last delivered report
+	queued        map[uint64]interface{} // Store pending reports
+	currentReport uint64                 // Last delivered report
 
 	maxRetries int
 	backoff    int
@@ -27,15 +27,15 @@ type reportHandler struct {
 // newReportHandler creates a new instance of reportHandler
 func newReporter(
 	maxRetries, backoff int,
-	input, retries chan *message,
+	input, retries chan *types.Message,
 ) *reportHandler {
 
 	r := &reportHandler{
 		input:   input,
 		retries: retries,
-		out:     make(chan *message, 100), // NOTE Temp channel size
+		out:     make(chan *types.Message, 100), // NOTE Temp channel size
 
-		queued: make(map[uint64]types.Reporter),
+		queued: make(map[uint64]interface{}),
 
 		maxRetries: maxRetries,
 		backoff:    backoff,
@@ -45,23 +45,26 @@ func newReporter(
 		// Get reports from the handler channel
 		for m := range r.input {
 			// If the message has status code 0 (success) send the report to the user
-			if m.code == 0 || r.maxRetries == 0 {
+			rep := m.Reports.Head().(report)
+			if rep.code == 0 || r.maxRetries == 0 {
 				r.out <- m
 				continue
 			}
 
 			// If the message has status code != 0 (fail) but has been retried the
 			// maximum number or retries also send it to the user
-			if r.maxRetries > 0 && m.retries >= r.maxRetries {
+			if r.maxRetries > 0 && rep.retries >= r.maxRetries {
 				r.out <- m
 				continue
 			}
 
-			// In othe case retry the message sending it again to the pipeline
+			// In other case retry the message sending it again to the pipeline
 			r.wg.Add(1)
-			go func(m *message) {
+			go func(m *types.Message) {
 				defer r.wg.Done()
-				m.retries++
+				rep := m.Reports.Pop().(report)
+				rep.retries++
+				m.Reports.Push(rep)
 				<-time.After(time.Duration(r.backoff) * time.Second)
 				r.retries <- m
 			}(m)
@@ -77,13 +80,14 @@ func newReporter(
 	return r
 }
 
-func (r *reportHandler) GetReports() chan types.Reporter {
-	reports := make(chan types.Reporter)
+func (r *reportHandler) GetReports() chan interface{} {
+	reports := make(chan interface{})
 
 	go func() {
 		for message := range r.out {
-			for _, report := range message.Reports() {
-				reports <- report
+			for !message.Reports.Empty() {
+				rep := message.Reports.Pop().(report)
+				reports <- rep
 			}
 		}
 
@@ -93,19 +97,20 @@ func (r *reportHandler) GetReports() chan types.Reporter {
 	return reports
 }
 
-func (r *reportHandler) GetOrderedReports() chan types.Reporter {
-	reports := make(chan types.Reporter)
+func (r *reportHandler) GetOrderedReports() chan interface{} {
+	reports := make(chan interface{})
 
 	go func() {
 		for message := range r.out {
-			for _, report := range message.Reports() {
-				if message.seq == r.currentReport {
+			for !message.Reports.Empty() {
+				rep := message.Reports.Pop().(report)
+				if rep.seq == r.currentReport {
 					// The message is the expected. Send it.
-					reports <- report
+					reports <- rep
 					r.currentReport++
 				} else {
 					// This message is not the expected. Store it.
-					r.queued[message.seq] = report
+					r.queued[rep.seq] = rep
 				}
 
 				// Check if there are stored messages and send them.
