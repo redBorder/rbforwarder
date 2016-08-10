@@ -26,10 +26,6 @@ func NewBatch(m *types.Message, group string, next types.Next, clk clock.Clock,
 		MessageCount: 1,
 	}
 
-	if clk == nil {
-		clk = clock.New()
-	}
-
 	if timeoutMillis != 0 {
 		timer := clk.Timer(time.Duration(timeoutMillis) * time.Millisecond)
 
@@ -60,7 +56,7 @@ func (b *Batch) Add(m *types.Message) {
 	buff := bytes.NewBuffer(currentPayload)
 	buff.Write(newPayload)
 
-	b.Message.PushData(buff.Bytes())
+	b.Message.Payload.Push(buff.Bytes())
 	b.Message.Opts.Push(newOptions)
 	b.Message.Reports.Push(newReport)
 

@@ -23,15 +23,38 @@ func (nd *NexterDoner) Next(m *types.Message) {
 
 func TestBatcher(t *testing.T) {
 	Convey("Given a batcher", t, func() {
-		batcher := &Batcher{config: Config{
-			TimeoutMillis:     1000,
-			Limit:             10,
-			MaxPendingBatches: 10,
-		},
-			clk: clock.NewMock(),
+		batcher := &Batcher{
+			config: Config{
+				TimeoutMillis:     1000,
+				Limit:             10,
+				MaxPendingBatches: 10,
+			},
 		}
 
 		batcher.Init(0)
+		batcher.clk = clock.NewMock()
+
+		Convey("When a message is received with no batch group", func() {
+			m := &types.Message{
+				Payload: lane.NewStack(),
+				Opts:    lane.NewStack(),
+				Reports: lane.NewStack(),
+			}
+			m.Payload.Push([]byte("Hello World"))
+
+			nd := new(NexterDoner)
+			nd.nextCalled = make(chan *types.Message, 1)
+			nd.On("Next", mock.AnythingOfType("*types.Message")).Times(1)
+
+			batcher.OnMessage(m, nd.Next, nil)
+
+			Convey("Message should be present on the batch", func() {
+				nd.AssertExpectations(t)
+				m := <-nd.nextCalled
+				So(len(batcher.batches), ShouldEqual, 0)
+				So(string(m.Payload.Pop().([]byte)), ShouldEqual, "Hello World")
+			})
+		})
 
 		Convey("When a message is received, but not yet sent", func() {
 			m := &types.Message{
