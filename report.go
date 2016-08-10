@@ -1,16 +1,12 @@
 package rbforwarder
 
+import "github.com/oleiade/lane"
+
 type report struct {
+	seq     uint64
 	code    int
 	status  string
 	retries int
-	opts    map[string]interface{}
-}
 
-func (r report) Status() (code int, status string, retries int) {
-	return r.code, r.status, r.retries
-}
-
-func (r report) GetOpts() map[string]interface{} {
-	return r.opts
+	opaque *lane.Stack
 }

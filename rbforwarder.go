@@ -30,9 +30,9 @@ type RBForwarder struct {
 
 // NewRBForwarder creates a new Forwarder object
 func NewRBForwarder(config Config) *RBForwarder {
-	produces := make(chan *message, config.QueueSize)
-	retries := make(chan *message, config.QueueSize)
-	reports := make(chan *message, config.QueueSize)
+	produces := make(chan *types.Message, config.QueueSize)
+	retries := make(chan *types.Message, config.QueueSize)
+	reports := make(chan *types.Message, config.QueueSize)
 
 	f := &RBForwarder{
 		working: 1,
@@ -71,34 +71,36 @@ func (f *RBForwarder) PushComponents(components []types.Composer, w []int) {
 
 // GetReports is used by the source to get a report for a sent message.
 // Reports are delivered on the same order that was sent
-func (f *RBForwarder) GetReports() <-chan types.Reporter {
+func (f *RBForwarder) GetReports() <-chan interface{} {
 	return f.r.GetReports()
 }
 
 // GetOrderedReports is the same as GetReports() but the reports are delivered
 // in order
-func (f *RBForwarder) GetOrderedReports() <-chan types.Reporter {
+func (f *RBForwarder) GetOrderedReports() <-chan interface{} {
 	return f.r.GetOrderedReports()
 }
 
 // Produce is used by the source to send messages to the backend
-func (f *RBForwarder) Produce(buf []byte, options map[string]interface{}) error {
+func (f *RBForwarder) Produce(data []byte, opts map[string]interface{}, opaque interface{}) error {
 	if atomic.LoadUint32(&f.working) == 0 {
 		return errors.New("Forwarder has been closed")
 	}
 
 	seq := f.currentProducedID
 	f.currentProducedID++
-
-	message := &message{
-		seq:  seq,
-		opts: lane.NewStack(),
+	m := types.NewMessage()
+	r := report{
+		seq:    seq,
+		opaque: lane.NewStack(),
 	}
 
-	message.PushData(buf)
-	message.opts.Push(options)
+	m.PushPayload(data)
+	m.Opts = opts
+	m.Reports.Push(r)
+	r.opaque.Push(opaque)
 
-	f.p.input <- message
+	f.p.input <- m
 
 	return nil
 }
