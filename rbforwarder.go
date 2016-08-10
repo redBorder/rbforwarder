@@ -82,30 +82,25 @@ func (f *RBForwarder) GetOrderedReports() <-chan interface{} {
 }
 
 // Produce is used by the source to send messages to the backend
-func (f *RBForwarder) Produce(buf []byte, options map[string]interface{}, opaque interface{}) error {
+func (f *RBForwarder) Produce(data []byte, opts map[string]interface{}, opaque interface{}) error {
 	if atomic.LoadUint32(&f.working) == 0 {
 		return errors.New("Forwarder has been closed")
 	}
 
 	seq := f.currentProducedID
 	f.currentProducedID++
-
-	message := &types.Message{
-		Payload: lane.NewStack(),
-		Reports: lane.NewStack(),
-		Opts:    lane.NewStack(),
-	}
+	m := types.NewMessage()
 	r := report{
 		seq:    seq,
 		opaque: lane.NewStack(),
 	}
 
+	m.PushPayload(data)
+	m.Opts = opts
+	m.Reports.Push(r)
 	r.opaque.Push(opaque)
-	message.Payload.Push(buf)
-	message.Opts.Push(options)
-	message.Reports.Push(r)
 
-	f.p.input <- message
+	f.p.input <- m
 
 	return nil
 }

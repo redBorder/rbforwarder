@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
-	"github.com/oleiade/lane"
 	"github.com/redBorder/rbforwarder/types"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/mock"
@@ -35,12 +34,8 @@ func TestBatcher(t *testing.T) {
 		batcher.clk = clock.NewMock()
 
 		Convey("When a message is received with no batch group", func() {
-			m := &types.Message{
-				Payload: lane.NewStack(),
-				Opts:    lane.NewStack(),
-				Reports: lane.NewStack(),
-			}
-			m.Payload.Push([]byte("Hello World"))
+			m := types.NewMessage()
+			m.PushPayload([]byte("Hello World"))
 
 			nd := new(NexterDoner)
 			nd.nextCalled = make(chan *types.Message, 1)
@@ -52,36 +47,35 @@ func TestBatcher(t *testing.T) {
 				nd.AssertExpectations(t)
 				m := <-nd.nextCalled
 				So(len(batcher.batches), ShouldEqual, 0)
-				So(string(m.Payload.Pop().([]byte)), ShouldEqual, "Hello World")
+				payload, err := m.PopPayload()
+				So(err, ShouldBeNil)
+				So(string(payload), ShouldEqual, "Hello World")
 			})
 		})
 
 		Convey("When a message is received, but not yet sent", func() {
-			m := &types.Message{
-				Payload: lane.NewStack(),
-				Opts:    lane.NewStack(),
-				Reports: lane.NewStack(),
-			}
-			m.Payload.Push([]byte("Hello World"))
-			m.Opts.Push(map[string]interface{}{
+			m := types.NewMessage()
+			m.PushPayload([]byte("Hello World"))
+			m.Opts = map[string]interface{}{
 				"batch_group": "group1",
-			})
+			}
 			m.Reports.Push("Report")
 
 			batcher.OnMessage(m, nil, nil)
 
 			Convey("Message should be present on the batch", func() {
-				var batch *Batch
-				var exists bool
-				batch, exists = batcher.batches["group1"]
-
+				batch, exists := batcher.batches["group1"]
 				So(exists, ShouldBeTrue)
-				data := batch.Message.Payload.Pop().([]byte)
-				opts := batch.Message.Opts.Pop().(map[string]interface{})
-				report := batch.Message.Reports.Pop().(string)
+
+				data := batch.Buff.Bytes()
 				So(string(data), ShouldEqual, "Hello World")
+
+				opts := batch.Message.Opts
 				So(opts["batch_group"], ShouldEqual, "group1")
+
+				report := batch.Message.Reports.Pop().(string)
 				So(report, ShouldEqual, "Report")
+
 				So(len(batcher.batches), ShouldEqual, 1)
 			})
 		})
@@ -90,15 +84,11 @@ func TestBatcher(t *testing.T) {
 			var messages []*types.Message
 
 			for i := 0; i < int(batcher.config.Limit); i++ {
-				m := &types.Message{
-					Payload: lane.NewStack(),
-					Opts:    lane.NewStack(),
-					Reports: lane.NewStack(),
-				}
-				m.Payload.Push([]byte("ABC"))
-				m.Opts.Push(map[string]interface{}{
+				m := types.NewMessage()
+				m.PushPayload([]byte("ABC"))
+				m.Opts = map[string]interface{}{
 					"batch_group": "group1",
-				})
+				}
 				m.Reports.Push("Report")
 
 				messages = append(messages, m)
@@ -115,13 +105,11 @@ func TestBatcher(t *testing.T) {
 			Convey("The batch should be sent", func() {
 				m := <-nd.nextCalled
 				nd.AssertExpectations(t)
-				data := m.Payload.Pop().([]byte)
-				optsSize := m.Opts.Size()
-				reportsSize := m.Reports.Size()
+				data, err := m.PopPayload()
+
+				So(err, ShouldBeNil)
 				So(string(data), ShouldEqual, "ABCABCABCABCABCABCABCABCABCABC")
-				So(m.Payload.Empty(), ShouldBeTrue)
-				So(optsSize, ShouldEqual, batcher.config.Limit)
-				So(reportsSize, ShouldEqual, batcher.config.Limit)
+				So(m.Reports.Size(), ShouldEqual, batcher.config.Limit)
 				So(batcher.batches["group1"], ShouldBeNil)
 				So(len(batcher.batches), ShouldEqual, 0)
 			})
@@ -131,15 +119,11 @@ func TestBatcher(t *testing.T) {
 			var messages []*types.Message
 
 			for i := 0; i < 5; i++ {
-				m := &types.Message{
-					Payload: lane.NewStack(),
-					Opts:    lane.NewStack(),
-					Reports: lane.NewStack(),
-				}
-				m.Payload.Push([]byte("ABC"))
-				m.Opts.Push(map[string]interface{}{
+				m := types.NewMessage()
+				m.PushPayload([]byte("Hello World"))
+				m.Opts = map[string]interface{}{
 					"batch_group": "group1",
-				})
+				}
 				m.Reports.Push("Report")
 
 				messages = append(messages, m)
@@ -167,35 +151,21 @@ func TestBatcher(t *testing.T) {
 		})
 
 		Convey("When multiple messages are received with differente groups", func() {
-			m1 := &types.Message{
-				Payload: lane.NewStack(),
-				Opts:    lane.NewStack(),
-				Reports: lane.NewStack(),
-			}
-			m1.Payload.Push([]byte("MESSAGE 1"))
-			m1.Opts.Push(map[string]interface{}{
+			m1 := types.NewMessage()
+			m1.PushPayload([]byte("MESSAGE 1"))
+			m1.Opts = map[string]interface{}{
 				"batch_group": "group1",
-			})
-
-			m2 := &types.Message{
-				Payload: lane.NewStack(),
-				Opts:    lane.NewStack(),
-				Reports: lane.NewStack(),
 			}
-			m2.Payload.Push([]byte("MESSAGE 2"))
-			m2.Opts.Push(map[string]interface{}{
+			m2 := types.NewMessage()
+			m2.PushPayload([]byte("MESSAGE 2"))
+			m2.Opts = map[string]interface{}{
 				"batch_group": "group2",
-			})
-
-			m3 := &types.Message{
-				Payload: lane.NewStack(),
-				Opts:    lane.NewStack(),
-				Reports: lane.NewStack(),
 			}
-			m3.Payload.Push([]byte("MESSAGE 3"))
-			m3.Opts.Push(map[string]interface{}{
+			m3 := types.NewMessage()
+			m3.PushPayload([]byte("MESSAGE 3"))
+			m3.Opts = map[string]interface{}{
 				"batch_group": "group2",
-			})
+			}
 
 			nd := new(NexterDoner)
 			nd.nextCalled = make(chan *types.Message, 2)
@@ -206,31 +176,35 @@ func TestBatcher(t *testing.T) {
 			batcher.OnMessage(m3, nd.Next, nil)
 
 			Convey("Each message should be in its group", func() {
-				var err error
-				group1 := batcher.batches["group1"].Message.Payload.Pop().([]byte)
-				So(err, ShouldBeNil)
-
-				group2 := batcher.batches["group2"].Message.Payload.Pop().([]byte)
-				So(err, ShouldBeNil)
-
+				group1 := batcher.batches["group1"].Buff.Bytes()
 				So(string(group1), ShouldEqual, "MESSAGE 1")
+
+				group2 := batcher.batches["group2"].Buff.Bytes()
 				So(string(group2), ShouldEqual, "MESSAGE 2MESSAGE 3")
+
 				So(len(batcher.batches), ShouldEqual, 2)
 			})
 
 			Convey("After a timeout the messages should be sent", func() {
 				clk := batcher.clk.(*clock.Mock)
 				So(len(batcher.batches), ShouldEqual, 2)
+
 				clk.Add(time.Duration(batcher.config.TimeoutMillis) * time.Millisecond)
+
 				group1 := <-nd.nextCalled
-				group1Data := group1.Payload.Pop().([]byte)
-				So(string(group1Data), ShouldEqual, "MESSAGE 1")
+				group1Data, err := group1.PopPayload()
+				So(err, ShouldBeNil)
+
 				group2 := <-nd.nextCalled
-				group2Data := group2.Payload.Pop().([]byte)
+				group2Data, err := group2.PopPayload()
+				So(err, ShouldBeNil)
+
+				So(string(group1Data), ShouldEqual, "MESSAGE 1")
 				So(string(group2Data), ShouldEqual, "MESSAGE 2MESSAGE 3")
 				So(batcher.batches["group1"], ShouldBeNil)
 				So(batcher.batches["group2"], ShouldBeNil)
 				So(len(batcher.batches), ShouldEqual, 0)
+
 				nd.AssertExpectations(t)
 			})
 		})
