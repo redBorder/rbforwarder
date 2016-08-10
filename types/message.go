@@ -19,6 +19,7 @@ func NewMessage() *Message {
 	return &Message{
 		payload: lane.NewStack(),
 		Reports: lane.NewStack(),
+		Opts:    make(map[string]interface{}),
 	}
 }
 
