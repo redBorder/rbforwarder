@@ -36,19 +36,17 @@ func (b *Batcher) Init(id int) {
 // OnMessage is called when a new message is receive. Add the new message to
 // a batch
 func (b *Batcher) OnMessage(m *types.Message, next types.Next, done types.Done) {
-	if opts, ok := m.Opts.Head().(map[string]interface{}); ok {
-		if group, exists := opts["batch_group"].(string); exists {
-			if batch, exists := b.batches[group]; exists {
-				batch.Add(m)
-				if batch.MessageCount >= b.config.Limit {
-					b.readyBatches <- batch
-				}
-			} else {
-				b.batches[group] = NewBatch(m, group, next, b.clk, b.config.TimeoutMillis, b.readyBatches)
+	if group, exists := m.Opts["batch_group"].(string); exists {
+		if batch, exists := b.batches[group]; exists {
+			batch.Add(m)
+			if batch.MessageCount >= b.config.Limit {
+				b.readyBatches <- batch
 			}
-
-			return
+		} else {
+			b.batches[group] = NewBatch(m, group, next, b.clk, b.config.TimeoutMillis, b.readyBatches)
 		}
+
+		return
 	}
 
 	next(m)

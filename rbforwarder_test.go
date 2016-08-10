@@ -23,9 +23,11 @@ func (c *MockMiddleComponent) OnMessage(
 	done types.Done,
 ) {
 	c.Called(m)
-	data := m.Payload.Pop().([]byte)
-	processedData := "-> [" + string(data) + "] <-"
-	m.Payload.Push([]byte(processedData))
+	if data, err := m.PopPayload(); err == nil {
+		processedData := "-> [" + string(data) + "] <-"
+		m.PushPayload([]byte(processedData))
+	}
+
 	next(m)
 }
 
@@ -49,8 +51,10 @@ func (c *MockComponent) OnMessage(
 	done types.Done,
 ) {
 	c.Called(m)
-	if data, ok := m.Payload.Pop().([]byte); ok {
+	if data, err := m.PopPayload(); err == nil {
 		c.channel <- string(data)
+	} else {
+		c.channel <- err.Error()
 	}
 
 	done(m, c.statusCode, c.status)

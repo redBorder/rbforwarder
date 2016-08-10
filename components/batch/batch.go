@@ -12,6 +12,7 @@ import (
 type Batch struct {
 	Group        string
 	Message      *types.Message
+	Buff         *bytes.Buffer
 	MessageCount uint       // Current number of messages in the buffer
 	Next         types.Next // Call to pass the message to the next handler
 }
@@ -19,11 +20,13 @@ type Batch struct {
 // NewBatch creates a new instance of Batch
 func NewBatch(m *types.Message, group string, next types.Next, clk clock.Clock,
 	timeoutMillis uint, ready chan *Batch) *Batch {
+	payload, _ := m.PopPayload()
 	b := &Batch{
 		Group:        group,
 		Next:         next,
 		Message:      m,
 		MessageCount: 1,
+		Buff:         bytes.NewBuffer(payload),
 	}
 
 	if timeoutMillis != 0 {
@@ -42,23 +45,18 @@ func NewBatch(m *types.Message, group string, next types.Next, clk clock.Clock,
 
 // Send the batch of messages to the next handler in the pipeline
 func (b *Batch) Send(cb func()) {
+	b.Message.PushPayload(b.Buff.Bytes())
 	cb()
 	b.Next(b.Message)
 }
 
 // Add merges a new message in the buffer
 func (b *Batch) Add(m *types.Message) {
-	newPayload := m.Payload.Pop().([]byte)
-	newOptions := m.Opts.Pop().(map[string]interface{})
 	newReport := m.Reports.Pop()
-
-	currentPayload := b.Message.Payload.Pop().([]byte)
-	buff := bytes.NewBuffer(currentPayload)
-	buff.Write(newPayload)
-
-	b.Message.Payload.Push(buff.Bytes())
-	b.Message.Opts.Push(newOptions)
 	b.Message.Reports.Push(newReport)
+
+	newPayload, _ := m.PopPayload()
+	b.Buff.Write(newPayload)
 
 	b.MessageCount++
 }
