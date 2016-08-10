@@ -18,17 +18,17 @@ func (c *MockMiddleComponent) Init(id int) error {
 }
 
 func (c *MockMiddleComponent) OnMessage(
-	m types.Messenger,
+	m *types.Message,
 	next types.Next,
 	done types.Done,
 ) {
 	c.Called(m)
-	data, _ := m.PopData()
-	processedData := "-> [" + string(data) + "] <-"
-	message := m.(*message)
-	message.PushData([]byte(processedData))
-	next(m)
+	if data, err := m.PopPayload(); err == nil {
+		processedData := "-> [" + string(data) + "] <-"
+		m.PushPayload([]byte(processedData))
+	}
 
+	next(m)
 }
 
 type MockComponent struct {
@@ -46,14 +46,17 @@ func (c *MockComponent) Init(id int) error {
 }
 
 func (c *MockComponent) OnMessage(
-	m types.Messenger,
+	m *types.Message,
 	next types.Next,
 	done types.Done,
 ) {
 	c.Called(m)
+	if data, err := m.PopPayload(); err == nil {
+		c.channel <- string(data)
+	} else {
+		c.channel <- err.Error()
+	}
 
-	data, _ := m.PopData()
-	c.channel <- string(data)
 	done(m, c.statusCode, c.status)
 }
 
@@ -87,11 +90,12 @@ func TestRBForwarder(t *testing.T) {
 			component.status = "OK"
 			component.statusCode = 0
 
-			component.On("OnMessage", mock.AnythingOfType("*rbforwarder.message")).Times(1)
+			component.On("OnMessage", mock.AnythingOfType("*types.Message")).Times(1)
 
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
 				map[string]interface{}{"message_id": "test123"},
+				nil,
 			)
 
 			Convey("\"Hello World\" message should be get by the worker", func() {
@@ -105,7 +109,6 @@ func TestRBForwarder(t *testing.T) {
 
 				So(lastReport, ShouldNotBeNil)
 				So(reports, ShouldEqual, 1)
-				So(lastReport.opts["message_id"], ShouldEqual, "test123")
 				So(lastReport.code, ShouldEqual, 0)
 				So(lastReport.status, ShouldEqual, "OK")
 				So(err, ShouldBeNil)
@@ -122,6 +125,7 @@ func TestRBForwarder(t *testing.T) {
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
 				map[string]interface{}{"message_id": "test123"},
+				nil,
 			)
 
 			Convey("Should error", func() {
@@ -131,71 +135,43 @@ func TestRBForwarder(t *testing.T) {
 
 		////////////////////////////////////////////////////////////////////////////
 
-		Convey("When calling OnMessage() with options", func() {
-			component.On("OnMessage", mock.AnythingOfType("*rbforwarder.message"))
-
-			err := rbforwarder.Produce(
-				[]byte("Hello World"),
-				map[string]interface{}{"option": "example_option"},
-			)
-
-			rbforwarder.Close()
-
-			Convey("Should be possible to read an option", func() {
-				for report := range rbforwarder.GetReports() {
-					So(report.GetOpts(), ShouldNotBeNil)
-					So(report.GetOpts()["option"], ShouldEqual, "example_option")
-				}
-
-				So(err, ShouldBeNil)
-				component.AssertExpectations(t)
-			})
-
-			Convey("Should not be possible to read an nonexistent option", func() {
-				for report := range rbforwarder.GetReports() {
-					So(report.GetOpts(), ShouldNotBeNil)
-					So(report.GetOpts()["invalid"], ShouldBeEmpty)
-				}
-
-				So(err, ShouldBeNil)
-				component.AssertExpectations(t)
-			})
-		})
-
-		// ////////////////////////////////////////////////////////////////////////////
-
-		Convey("When calling OnMessage() without options", func() {
-			component.On("OnMessage", mock.AnythingOfType("*rbforwarder.message"))
+		Convey("When calling OnMessage() with opaque", func() {
+			component.On("OnMessage", mock.AnythingOfType("*types.Message"))
 
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
 				nil,
+				"This is an opaque",
 			)
 
-			rbforwarder.Close()
+			Convey("Should be possible to read the opaque", func() {
+				So(err, ShouldBeNil)
 
-			Convey("Should not be possible to read the option", func() {
-				for report := range rbforwarder.GetReports() {
-					So(err, ShouldBeNil)
-					So(report.GetOpts(), ShouldBeNil)
+				var reports int
+				var lastReport report
+				for r := range rbforwarder.GetReports() {
+					reports++
+					lastReport = r.(report)
+					rbforwarder.Close()
 				}
 
-				So(err, ShouldBeNil)
-				component.AssertExpectations(t)
+				opaque := lastReport.opaque.Pop().(string)
+				So(opaque, ShouldEqual, "This is an opaque")
 			})
 		})
 
-		// ////////////////////////////////////////////////////////////////////////////
+		////////////////////////////////////////////////////////////////////////////
 
 		Convey("When a message fails to send", func() {
 			component.status = "Fake Error"
 			component.statusCode = 99
 
-			component.On("OnMessage", mock.AnythingOfType("*rbforwarder.message")).Times(4)
+			component.On("OnMessage", mock.AnythingOfType("*types.Message")).Times(4)
 
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
 				map[string]interface{}{"message_id": "test123"},
+				nil,
 			)
 
 			Convey("The message should be retried", func() {
@@ -211,7 +187,6 @@ func TestRBForwarder(t *testing.T) {
 
 				So(lastReport, ShouldNotBeNil)
 				So(reports, ShouldEqual, 1)
-				So(lastReport.opts["message_id"], ShouldEqual, "test123")
 				So(lastReport.status, ShouldEqual, "Fake Error")
 				So(lastReport.code, ShouldEqual, 99)
 				So(lastReport.retries, ShouldEqual, numRetries)
@@ -225,13 +200,14 @@ func TestRBForwarder(t *testing.T) {
 		Convey("When 10000 messages are produced", func() {
 			var numErr int
 
-			component.On("OnMessage", mock.AnythingOfType("*rbforwarder.message")).
+			component.On("OnMessage", mock.AnythingOfType("*types.Message")).
 				Return(nil).
 				Times(numMessages)
 
 			for i := 0; i < numMessages; i++ {
 				if err := rbforwarder.Produce([]byte("Hello World"),
-					map[string]interface{}{"message_id": i},
+					nil,
+					i,
 				); err != nil {
 					numErr++
 				}
@@ -256,8 +232,8 @@ func TestRBForwarder(t *testing.T) {
 				ordered := true
 				var reports int
 
-				for report := range rbforwarder.GetOrderedReports() {
-					if report.GetOpts()["message_id"] != reports {
+				for rep := range rbforwarder.GetOrderedReports() {
+					if rep.(report).opaque.Pop().(int) != reports {
 						ordered = false
 					}
 					reports++
@@ -310,23 +286,24 @@ func TestRBForwarder(t *testing.T) {
 			component2.status = "OK"
 			component2.statusCode = 0
 
-			component1.On("OnMessage", mock.AnythingOfType("*rbforwarder.message"))
-			component2.On("OnMessage", mock.AnythingOfType("*rbforwarder.message"))
+			component1.On("OnMessage", mock.AnythingOfType("*types.Message"))
+			component2.On("OnMessage", mock.AnythingOfType("*types.Message"))
 
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
 				map[string]interface{}{"message_id": "test123"},
+				nil,
 			)
 
 			rbforwarder.Close()
 
 			Convey("\"Hello World\" message should be processed by the pipeline", func() {
 				reports := 0
-				for report := range rbforwarder.GetReports() {
+				for rep := range rbforwarder.GetReports() {
 					reports++
 
-					So(report.GetOpts()["message_id"], ShouldEqual, "test123")
-					code, status, _ := report.Status()
+					code := rep.(report).code
+					status := rep.(report).status
 					So(code, ShouldEqual, 0)
 					So(status, ShouldEqual, "OK")
 				}
