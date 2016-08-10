@@ -7,6 +7,19 @@ import (
 )
 
 func TestMessage(t *testing.T) {
+	Convey("Given a message", t, func() {
+
+		Convey("When fields are accessed", func() {
+			m := NewMessage()
+
+			Convey("Then fields has to be initialized", func() {
+				So(m.Opts, ShouldNotBeNil)
+				So(m.payload, ShouldNotBeNil)
+				So(m.Reports, ShouldNotBeNil)
+			})
+		})
+	})
+
 	Convey("Given a payload", t, func() {
 		payload := "This is the payload"
 
