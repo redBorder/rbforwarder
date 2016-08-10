@@ -23,9 +23,9 @@ func (c *MockMiddleComponent) OnMessage(
 	done types.Done,
 ) {
 	c.Called(m)
-	data, _ := m.PopData()
+	data := m.Payload.Pop().([]byte)
 	processedData := "-> [" + string(data) + "] <-"
-	m.PushData([]byte(processedData))
+	m.Payload.Push([]byte(processedData))
 	next(m)
 }
 
@@ -49,9 +49,10 @@ func (c *MockComponent) OnMessage(
 	done types.Done,
 ) {
 	c.Called(m)
+	if data, ok := m.Payload.Pop().([]byte); ok {
+		c.channel <- string(data)
+	}
 
-	data, _ := m.PopData()
-	c.channel <- string(data)
 	done(m, c.statusCode, c.status)
 }
 
@@ -90,6 +91,7 @@ func TestRBForwarder(t *testing.T) {
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
 				map[string]interface{}{"message_id": "test123"},
+				nil,
 			)
 
 			Convey("\"Hello World\" message should be get by the worker", func() {
@@ -119,6 +121,7 @@ func TestRBForwarder(t *testing.T) {
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
 				map[string]interface{}{"message_id": "test123"},
+				nil,
 			)
 
 			Convey("Should error", func() {
@@ -128,38 +131,32 @@ func TestRBForwarder(t *testing.T) {
 
 		////////////////////////////////////////////////////////////////////////////
 
-		Convey("When calling OnMessage() with options", func() {
+		Convey("When calling OnMessage() with opaque", func() {
 			component.On("OnMessage", mock.AnythingOfType("*types.Message"))
 
-			// err := rbforwarder.Produce(
-			// 	[]byte("Hello World"),
-			// 	map[string]interface{}{"option": "example_option"},
-			// )
+			err := rbforwarder.Produce(
+				[]byte("Hello World"),
+				nil,
+				"This is an opaque",
+			)
 
-			rbforwarder.Close()
+			Convey("Should be possible to read the opaque", func() {
+				So(err, ShouldBeNil)
 
-			Convey("Should be possible to read an option", nil)
+				var reports int
+				var lastReport report
+				for r := range rbforwarder.GetReports() {
+					reports++
+					lastReport = r.(report)
+					rbforwarder.Close()
+				}
 
-			Convey("Should not be possible to read an nonexistent option", nil)
-
+				opaque := lastReport.opaque.Pop().(string)
+				So(opaque, ShouldEqual, "This is an opaque")
+			})
 		})
 
-		// ////////////////////////////////////////////////////////////////////////////
-
-		Convey("When calling OnMessage() without options", func() {
-			component.On("OnMessage", mock.AnythingOfType("*types.Message"))
-
-			// err := rbforwarder.Produce(
-			// 	[]byte("Hello World"),
-			// 	nil,
-			// )
-
-			rbforwarder.Close()
-
-			Convey("Should not be possible to read the option", nil)
-		})
-
-		// ////////////////////////////////////////////////////////////////////////////
+		////////////////////////////////////////////////////////////////////////////
 
 		Convey("When a message fails to send", func() {
 			component.status = "Fake Error"
@@ -170,6 +167,7 @@ func TestRBForwarder(t *testing.T) {
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
 				map[string]interface{}{"message_id": "test123"},
+				nil,
 			)
 
 			Convey("The message should be retried", func() {
@@ -204,7 +202,8 @@ func TestRBForwarder(t *testing.T) {
 
 			for i := 0; i < numMessages; i++ {
 				if err := rbforwarder.Produce([]byte("Hello World"),
-					map[string]interface{}{"message_id": i},
+					nil,
+					i,
 				); err != nil {
 					numErr++
 				}
@@ -225,27 +224,26 @@ func TestRBForwarder(t *testing.T) {
 				component.AssertExpectations(t)
 			})
 
-			Convey("10000 reports should be received in order", nil)
-			// func() {
-			// 	ordered := true
-			// 	var reports int
-			//
-			// 	for rep := range rbforwarder.GetOrderedReports() {
-			// 		if rep.(report).GetOpts()["message_id"] != reports {
-			// 			ordered = false
-			// 		}
-			// 		reports++
-			// 		if reports >= numMessages {
-			// 			rbforwarder.Close()
-			// 		}
-			// 	}
-			//
-			// 	So(numErr, ShouldBeZeroValue)
-			// 	So(ordered, ShouldBeTrue)
-			// 	So(reports, ShouldEqual, numMessages)
-			//
-			// 	component.AssertExpectations(t)
-			// })
+			Convey("10000 reports should be received in order", func() {
+				ordered := true
+				var reports int
+
+				for rep := range rbforwarder.GetOrderedReports() {
+					if rep.(report).opaque.Pop().(int) != reports {
+						ordered = false
+					}
+					reports++
+					if reports >= numMessages {
+						rbforwarder.Close()
+					}
+				}
+
+				So(numErr, ShouldBeZeroValue)
+				So(ordered, ShouldBeTrue)
+				So(reports, ShouldEqual, numMessages)
+
+				component.AssertExpectations(t)
+			})
 		})
 	})
 
@@ -290,6 +288,7 @@ func TestRBForwarder(t *testing.T) {
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
 				map[string]interface{}{"message_id": "test123"},
+				nil,
 			)
 
 			rbforwarder.Close()
@@ -299,7 +298,8 @@ func TestRBForwarder(t *testing.T) {
 				for rep := range rbforwarder.GetReports() {
 					reports++
 
-					code, status, _ := rep.(report).Status()
+					code := rep.(report).code
+					status := rep.(report).status
 					So(code, ShouldEqual, 0)
 					So(status, ShouldEqual, "OK")
 				}
