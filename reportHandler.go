@@ -4,16 +4,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redBorder/rbforwarder/types"
+	"github.com/redBorder/rbforwarder/utils"
 )
 
 // reportHandler is used to handle the reports produced by the last element
 // of the pipeline. The first element of the pipeline can know the status
 // of the produced message using GetReports() or GetOrderedReports()
 type reportHandler struct {
-	input   chan *types.Message // Receive messages from pipeline
-	retries chan *types.Message // Send messages back to the pipeline
-	out     chan *types.Message // Send reports to the user
+	input   chan *utils.Message // Receive messages from pipeline
+	retries chan *utils.Message // Send messages back to the pipeline
+	out     chan *utils.Message // Send reports to the user
 
 	queued        map[uint64]interface{} // Store pending reports
 	currentReport uint64                 // Last delivered report
@@ -27,13 +27,13 @@ type reportHandler struct {
 // newReportHandler creates a new instance of reportHandler
 func newReporter(
 	maxRetries, backoff int,
-	input, retries chan *types.Message,
+	input, retries chan *utils.Message,
 ) *reportHandler {
 
 	r := &reportHandler{
 		input:   input,
 		retries: retries,
-		out:     make(chan *types.Message, 100), // NOTE Temp channel size
+		out:     make(chan *utils.Message, 100), // NOTE Temp channel size
 
 		queued: make(map[uint64]interface{}),
 
@@ -60,7 +60,7 @@ func newReporter(
 
 			// In other case retry the message sending it again to the pipeline
 			r.wg.Add(1)
-			go func(m *types.Message) {
+			go func(m *utils.Message) {
 				defer r.wg.Done()
 				rep := m.Reports.Pop().(report)
 				rep.retries++

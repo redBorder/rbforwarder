@@ -6,7 +6,7 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	"github.com/oleiade/lane"
-	"github.com/redBorder/rbforwarder/types"
+	"github.com/redBorder/rbforwarder/utils"
 )
 
 // Version is the current tag
@@ -30,9 +30,9 @@ type RBForwarder struct {
 
 // NewRBForwarder creates a new Forwarder object
 func NewRBForwarder(config Config) *RBForwarder {
-	produces := make(chan *types.Message, config.QueueSize)
-	retries := make(chan *types.Message, config.QueueSize)
-	reports := make(chan *types.Message, config.QueueSize)
+	produces := make(chan *utils.Message, config.QueueSize)
+	retries := make(chan *utils.Message, config.QueueSize)
+	reports := make(chan *utils.Message, config.QueueSize)
 
 	f := &RBForwarder{
 		working: 1,
@@ -63,7 +63,7 @@ func (f *RBForwarder) Close() {
 }
 
 // PushComponents adds a new component to the pipeline
-func (f *RBForwarder) PushComponents(components []types.Composer, w []int) {
+func (f *RBForwarder) PushComponents(components []utils.Composer, w []int) {
 	for i, component := range components {
 		f.p.PushComponent(component, w[i])
 	}
@@ -89,7 +89,7 @@ func (f *RBForwarder) Produce(data []byte, opts map[string]interface{}, opaque i
 
 	seq := f.currentProducedID
 	f.currentProducedID++
-	m := types.NewMessage()
+	m := utils.NewMessage()
 	r := report{
 		seq:    seq,
 		opaque: lane.NewStack(),

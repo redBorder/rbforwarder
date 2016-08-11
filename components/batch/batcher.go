@@ -2,7 +2,7 @@ package batcher
 
 import (
 	"github.com/benbjohnson/clock"
-	"github.com/redBorder/rbforwarder/types"
+	"github.com/redBorder/rbforwarder/utils"
 )
 
 // Batcher allows to merge multiple messages in a single one
@@ -35,7 +35,7 @@ func (b *Batcher) Init(id int) {
 
 // OnMessage is called when a new message is receive. Add the new message to
 // a batch
-func (b *Batcher) OnMessage(m *types.Message, next types.Next, done types.Done) {
+func (b *Batcher) OnMessage(m *utils.Message, next utils.Next, done utils.Done) {
 	if group, exists := m.Opts["batch_group"].(string); exists {
 		if batch, exists := b.batches[group]; exists {
 			batch.Add(m)

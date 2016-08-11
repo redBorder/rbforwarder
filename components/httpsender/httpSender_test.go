@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/redBorder/rbforwarder/types"
+	"github.com/redBorder/rbforwarder/utils"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/mock"
 )
@@ -19,7 +19,7 @@ type Doner struct {
 	}
 }
 
-func (d *Doner) Done(m *types.Message, code int, status string) {
+func (d *Doner) Done(m *utils.Message, code int, status string) {
 	d.Called(m, code, status)
 	d.doneCalled <- struct {
 		code   int
@@ -64,7 +64,7 @@ func TestHTTPSender(t *testing.T) {
 			var url string
 			sender.Init(0)
 
-			m := types.NewMessage()
+			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
 			sender.client = NewTestClient(401, func(req *http.Request) {
 				url = req.URL.String()
@@ -77,7 +77,7 @@ func TestHTTPSender(t *testing.T) {
 				}, 1),
 			}
 
-			d.On("Done", mock.AnythingOfType("*types.Message"),
+			d.On("Done", mock.AnythingOfType("*utils.Message"),
 				mock.AnythingOfType("int"), mock.AnythingOfType("string"))
 
 			sender.OnMessage(m, nil, d.Done)
@@ -96,7 +96,7 @@ func TestHTTPSender(t *testing.T) {
 			var url string
 			sender.Init(0)
 
-			m := types.NewMessage()
+			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
 
 			sender.client = NewTestClient(200, func(req *http.Request) {
@@ -109,7 +109,7 @@ func TestHTTPSender(t *testing.T) {
 					status string
 				}, 1),
 			}
-			d.On("Done", mock.AnythingOfType("*types.Message"),
+			d.On("Done", mock.AnythingOfType("*utils.Message"),
 				mock.AnythingOfType("int"), mock.AnythingOfType("string"))
 
 			sender.OnMessage(m, nil, d.Done)
@@ -128,7 +128,7 @@ func TestHTTPSender(t *testing.T) {
 			var url string
 			sender.Init(0)
 
-			m := types.NewMessage()
+			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
 			m.Opts["http_endpoint"] = "endpoint1"
 
@@ -142,7 +142,7 @@ func TestHTTPSender(t *testing.T) {
 					status string
 				}, 1),
 			}
-			d.On("Done", mock.AnythingOfType("*types.Message"),
+			d.On("Done", mock.AnythingOfType("*utils.Message"),
 				mock.AnythingOfType("int"), mock.AnythingOfType("string"))
 
 			sender.OnMessage(m, nil, d.Done)
@@ -161,7 +161,7 @@ func TestHTTPSender(t *testing.T) {
 			var url string
 			sender.Init(0)
 
-			m := types.NewMessage()
+			m := utils.NewMessage()
 
 			sender.client = NewTestClient(200, func(req *http.Request) {
 				url = req.URL.String()
@@ -173,7 +173,7 @@ func TestHTTPSender(t *testing.T) {
 					status string
 				}, 1),
 			}
-			d.On("Done", mock.AnythingOfType("*types.Message"),
+			d.On("Done", mock.AnythingOfType("*utils.Message"),
 				mock.AnythingOfType("int"), mock.AnythingOfType("string"))
 
 			sender.OnMessage(m, nil, d.Done)
@@ -191,7 +191,7 @@ func TestHTTPSender(t *testing.T) {
 		Convey("When a the HTTP client fails", func() {
 			sender.Init(0)
 
-			m := types.NewMessage()
+			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
 
 			sender.client = NewTestClient(200, func(req *http.Request) {
@@ -204,7 +204,7 @@ func TestHTTPSender(t *testing.T) {
 					status string
 				}, 1),
 			}
-			d.On("Done", mock.AnythingOfType("*types.Message"),
+			d.On("Done", mock.AnythingOfType("*utils.Message"),
 				mock.AnythingOfType("int"), mock.AnythingOfType("string"))
 
 			sender.OnMessage(m, nil, d.Done)
@@ -224,7 +224,7 @@ func TestHTTPSender(t *testing.T) {
 		sender.Init(0)
 
 		Convey("When try to send messages", func() {
-			m := types.NewMessage()
+			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
 			m.Opts["http_endpoint"] = "endpoint1"
 
@@ -235,7 +235,7 @@ func TestHTTPSender(t *testing.T) {
 				}, 1),
 			}
 
-			d.On("Done", mock.AnythingOfType("*types.Message"),
+			d.On("Done", mock.AnythingOfType("*utils.Message"),
 				mock.AnythingOfType("int"), mock.AnythingOfType("string"))
 
 			sender.OnMessage(m, nil, d.Done)

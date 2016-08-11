@@ -8,7 +8,7 @@ import (
 	"net/http"
 
 	"github.com/asaskevich/govalidator"
-	"github.com/redBorder/rbforwarder/types"
+	"github.com/redBorder/rbforwarder/utils"
 )
 
 // HTTPSender is a component for the rbforwarder pipeline that sends messages
@@ -33,7 +33,7 @@ func (s *HTTPSender) Init(id int) {
 }
 
 // OnMessage is called when a new message should be sent via HTTP
-func (s *HTTPSender) OnMessage(m *types.Message, next types.Next, done types.Done) {
+func (s *HTTPSender) OnMessage(m *utils.Message, next utils.Next, done utils.Done) {
 	var u string
 
 	if s.err != nil {

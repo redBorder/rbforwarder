@@ -3,7 +3,7 @@ package rbforwarder
 import (
 	"testing"
 
-	"github.com/redBorder/rbforwarder/types"
+	"github.com/redBorder/rbforwarder/utils"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/mock"
 )
@@ -18,9 +18,9 @@ func (c *MockMiddleComponent) Init(id int) error {
 }
 
 func (c *MockMiddleComponent) OnMessage(
-	m *types.Message,
-	next types.Next,
-	done types.Done,
+	m *utils.Message,
+	next utils.Next,
+	done utils.Done,
 ) {
 	c.Called(m)
 	if data, err := m.PopPayload(); err == nil {
@@ -46,9 +46,9 @@ func (c *MockComponent) Init(id int) error {
 }
 
 func (c *MockComponent) OnMessage(
-	m *types.Message,
-	next types.Next,
-	done types.Done,
+	m *utils.Message,
+	next utils.Next,
+	done utils.Done,
 ) {
 	c.Called(m)
 	if data, err := m.PopPayload(); err == nil {
@@ -77,7 +77,7 @@ func TestRBForwarder(t *testing.T) {
 
 		component.On("Init").Return(nil).Times(numWorkers)
 
-		var components []types.Composer
+		var components []utils.Composer
 		var instances []int
 		components = append(components, component)
 		instances = append(instances, numWorkers)
@@ -90,7 +90,7 @@ func TestRBForwarder(t *testing.T) {
 			component.status = "OK"
 			component.statusCode = 0
 
-			component.On("OnMessage", mock.AnythingOfType("*types.Message")).Times(1)
+			component.On("OnMessage", mock.AnythingOfType("*utils.Message")).Times(1)
 
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
@@ -136,7 +136,7 @@ func TestRBForwarder(t *testing.T) {
 		////////////////////////////////////////////////////////////////////////////
 
 		Convey("When calling OnMessage() with opaque", func() {
-			component.On("OnMessage", mock.AnythingOfType("*types.Message"))
+			component.On("OnMessage", mock.AnythingOfType("*utils.Message"))
 
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
@@ -166,7 +166,7 @@ func TestRBForwarder(t *testing.T) {
 			component.status = "Fake Error"
 			component.statusCode = 99
 
-			component.On("OnMessage", mock.AnythingOfType("*types.Message")).Times(4)
+			component.On("OnMessage", mock.AnythingOfType("*utils.Message")).Times(4)
 
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
@@ -200,7 +200,7 @@ func TestRBForwarder(t *testing.T) {
 		Convey("When 10000 messages are produced", func() {
 			var numErr int
 
-			component.On("OnMessage", mock.AnythingOfType("*types.Message")).
+			component.On("OnMessage", mock.AnythingOfType("*utils.Message")).
 				Return(nil).
 				Times(numMessages)
 
@@ -271,7 +271,7 @@ func TestRBForwarder(t *testing.T) {
 			component2.On("Init").Return(nil)
 		}
 
-		var components []types.Composer
+		var components []utils.Composer
 		var instances []int
 
 		components = append(components, component1)
@@ -286,8 +286,8 @@ func TestRBForwarder(t *testing.T) {
 			component2.status = "OK"
 			component2.statusCode = 0
 
-			component1.On("OnMessage", mock.AnythingOfType("*types.Message"))
-			component2.On("OnMessage", mock.AnythingOfType("*types.Message"))
+			component1.On("OnMessage", mock.AnythingOfType("*utils.Message"))
+			component2.On("OnMessage", mock.AnythingOfType("*utils.Message"))
 
 			err := rbforwarder.Produce(
 				[]byte("Hello World"),
