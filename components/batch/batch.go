@@ -5,20 +5,20 @@ import (
 	"time"
 
 	"github.com/benbjohnson/clock"
-	"github.com/redBorder/rbforwarder/types"
+	"github.com/redBorder/rbforwarder/utils"
 )
 
 // Batch groups multiple messages
 type Batch struct {
 	Group        string
-	Message      *types.Message
+	Message      *utils.Message
 	Buff         *bytes.Buffer
 	MessageCount uint       // Current number of messages in the buffer
-	Next         types.Next // Call to pass the message to the next handler
+	Next         utils.Next // Call to pass the message to the next handler
 }
 
 // NewBatch creates a new instance of Batch
-func NewBatch(m *types.Message, group string, next types.Next, clk clock.Clock,
+func NewBatch(m *utils.Message, group string, next utils.Next, clk clock.Clock,
 	timeoutMillis uint, ready chan *Batch) *Batch {
 	payload, _ := m.PopPayload()
 	b := &Batch{
@@ -51,7 +51,7 @@ func (b *Batch) Send(cb func()) {
 }
 
 // Add merges a new message in the buffer
-func (b *Batch) Add(m *types.Message) {
+func (b *Batch) Add(m *utils.Message) {
 	newReport := m.Reports.Pop()
 	b.Message.Reports.Push(newReport)
 

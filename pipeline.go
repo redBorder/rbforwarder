@@ -4,24 +4,24 @@ import (
 	"sync"
 
 	"github.com/oleiade/lane"
-	"github.com/redBorder/rbforwarder/types"
+	"github.com/redBorder/rbforwarder/utils"
 )
 
 type component struct {
-	pool    chan chan *types.Message
+	pool    chan chan *utils.Message
 	workers int
 }
 
 // pipeline contains the components
 type pipeline struct {
 	components []component
-	input      chan *types.Message
-	retry      chan *types.Message
-	output     chan *types.Message
+	input      chan *utils.Message
+	retry      chan *utils.Message
+	output     chan *utils.Message
 }
 
 // newPipeline creates a new Backend
-func newPipeline(input, retry, output chan *types.Message) *pipeline {
+func newPipeline(input, retry, output chan *utils.Message) *pipeline {
 	var wg sync.WaitGroup
 	p := &pipeline{
 		input:  input,
@@ -62,11 +62,11 @@ func newPipeline(input, retry, output chan *types.Message) *pipeline {
 }
 
 // PushComponent adds a new component to the pipeline
-func (p *pipeline) PushComponent(composser types.Composer, w int) {
+func (p *pipeline) PushComponent(composser utils.Composer, w int) {
 	var wg sync.WaitGroup
 	c := component{
 		workers: w,
-		pool:    make(chan chan *types.Message, w),
+		pool:    make(chan chan *utils.Message, w),
 	}
 
 	index := len(p.components)
@@ -75,19 +75,19 @@ func (p *pipeline) PushComponent(composser types.Composer, w int) {
 	for i := 0; i < w; i++ {
 		composser.Init(i)
 
-		worker := make(chan *types.Message)
+		worker := make(chan *utils.Message)
 		p.components[index].pool <- worker
 
 		wg.Add(1)
 		go func(i int) {
 			wg.Done()
 			for m := range worker {
-				composser.OnMessage(m, func(m *types.Message) {
+				composser.OnMessage(m, func(m *utils.Message) {
 					if len(p.components) >= index {
 						nextWorker := <-p.components[index+1].pool
 						nextWorker <- m
 					}
-				}, func(m *types.Message, code int, status string) {
+				}, func(m *utils.Message, code int, status string) {
 					reports := lane.NewStack()
 					for !m.Reports.Empty() {
 						rep := m.Reports.Pop().(report)
