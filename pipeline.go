@@ -89,10 +89,11 @@ func (p *pipeline) PushComponent(composser utils.Composer, w int) {
 					}
 				}, func(m *utils.Message, code int, status string) {
 					reports := lane.NewStack()
+
 					for !m.Reports.Empty() {
-						rep := m.Reports.Pop().(report)
-						rep.code = code
-						rep.status = status
+						rep := m.Reports.Pop().(Report)
+						rep.Code = code
+						rep.Status = status
 						reports.Push(rep)
 					}
 
