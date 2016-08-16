@@ -45,8 +45,8 @@ func newReporter(
 		// Get reports from the handler channel
 		for m := range r.input {
 			// If the message has status code 0 (success) send the report to the user
-			rep := m.Reports.Head().(report)
-			if rep.code == 0 || r.maxRetries == 0 {
+			rep := m.Reports.Head().(Report)
+			if rep.Code == 0 || r.maxRetries == 0 {
 				r.out <- m
 				continue
 			}
@@ -62,7 +62,7 @@ func newReporter(
 			r.wg.Add(1)
 			go func(m *utils.Message) {
 				defer r.wg.Done()
-				rep := m.Reports.Pop().(report)
+				rep := m.Reports.Pop().(Report)
 				rep.retries++
 				m.Reports.Push(rep)
 				<-time.After(time.Duration(r.backoff) * time.Second)
@@ -86,7 +86,7 @@ func (r *reportHandler) GetReports() chan interface{} {
 	go func() {
 		for message := range r.out {
 			for !message.Reports.Empty() {
-				rep := message.Reports.Pop().(report)
+				rep := message.Reports.Pop().(Report)
 				reports <- rep
 			}
 		}
@@ -103,7 +103,7 @@ func (r *reportHandler) GetOrderedReports() chan interface{} {
 	go func() {
 		for message := range r.out {
 			for !message.Reports.Empty() {
-				rep := message.Reports.Pop().(report)
+				rep := message.Reports.Pop().(Report)
 				if rep.seq == r.currentReport {
 					// The message is the expected. Send it.
 					reports <- rep

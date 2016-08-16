@@ -12,9 +12,9 @@ type MockMiddleComponent struct {
 	mock.Mock
 }
 
-func (c *MockMiddleComponent) Init(id int) error {
-	args := c.Called()
-	return args.Error(0)
+func (c *MockMiddleComponent) Init(id int) {
+	c.Called()
+	return
 }
 
 func (c *MockMiddleComponent) OnMessage(
@@ -40,9 +40,8 @@ type MockComponent struct {
 	statusCode int
 }
 
-func (c *MockComponent) Init(id int) error {
-	args := c.Called()
-	return args.Error(0)
+func (c *MockComponent) Init(id int) {
+	c.Called()
 }
 
 func (c *MockComponent) OnMessage(
@@ -77,7 +76,7 @@ func TestRBForwarder(t *testing.T) {
 
 		component.On("Init").Return(nil).Times(numWorkers)
 
-		var components []utils.Composer
+		var components []interface{}
 		var instances []int
 		components = append(components, component)
 		instances = append(instances, numWorkers)
@@ -99,18 +98,18 @@ func TestRBForwarder(t *testing.T) {
 			)
 
 			Convey("\"Hello World\" message should be get by the worker", func() {
-				var lastReport report
+				var lastReport Report
 				var reports int
 				for r := range rbforwarder.GetReports() {
 					reports++
-					lastReport = r.(report)
+					lastReport = r.(Report)
 					rbforwarder.Close()
 				}
 
 				So(lastReport, ShouldNotBeNil)
 				So(reports, ShouldEqual, 1)
-				So(lastReport.code, ShouldEqual, 0)
-				So(lastReport.status, ShouldEqual, "OK")
+				So(lastReport.Code, ShouldEqual, 0)
+				So(lastReport.Status, ShouldEqual, "OK")
 				So(err, ShouldBeNil)
 
 				component.AssertExpectations(t)
@@ -148,14 +147,14 @@ func TestRBForwarder(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				var reports int
-				var lastReport report
+				var lastReport Report
 				for r := range rbforwarder.GetReports() {
 					reports++
-					lastReport = r.(report)
+					lastReport = r.(Report)
 					rbforwarder.Close()
 				}
 
-				opaque := lastReport.opaque.Pop().(string)
+				opaque := lastReport.Opaque.(string)
 				So(opaque, ShouldEqual, "This is an opaque")
 			})
 		})
@@ -178,17 +177,17 @@ func TestRBForwarder(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				var reports int
-				var lastReport report
+				var lastReport Report
 				for r := range rbforwarder.GetReports() {
 					reports++
-					lastReport = r.(report)
+					lastReport = r.(Report)
 					rbforwarder.Close()
 				}
 
 				So(lastReport, ShouldNotBeNil)
 				So(reports, ShouldEqual, 1)
-				So(lastReport.status, ShouldEqual, "Fake Error")
-				So(lastReport.code, ShouldEqual, 99)
+				So(lastReport.Status, ShouldEqual, "Fake Error")
+				So(lastReport.Code, ShouldEqual, 99)
 				So(lastReport.retries, ShouldEqual, numRetries)
 
 				component.AssertExpectations(t)
@@ -233,7 +232,7 @@ func TestRBForwarder(t *testing.T) {
 				var reports int
 
 				for rep := range rbforwarder.GetOrderedReports() {
-					if rep.(report).opaque.Pop().(int) != reports {
+					if rep.(Report).Opaque.(int) != reports {
 						ordered = false
 					}
 					reports++
@@ -271,7 +270,7 @@ func TestRBForwarder(t *testing.T) {
 			component2.On("Init").Return(nil)
 		}
 
-		var components []utils.Composer
+		var components []interface{}
 		var instances []int
 
 		components = append(components, component1)
@@ -302,8 +301,8 @@ func TestRBForwarder(t *testing.T) {
 				for rep := range rbforwarder.GetReports() {
 					reports++
 
-					code := rep.(report).code
-					status := rep.(report).status
+					code := rep.(Report).Code
+					status := rep.(Report).Status
 					So(code, ShouldEqual, 0)
 					So(status, ShouldEqual, "OK")
 				}
