@@ -11,6 +11,7 @@ import (
 func main() {
 	var components []interface{}
 	var workers []int
+	const numMessages = 100000
 
 	f := rbforwarder.NewRBForwarder(rbforwarder.Config{
 		Retries:   3,
@@ -21,7 +22,7 @@ func main() {
 	batch := &batcher.Batcher{
 		Config: batcher.Config{
 			TimeoutMillis: 1000,
-			Limit:         2,
+			Limit:         1000,
 		},
 	}
 	components = append(components, batch)
@@ -40,18 +41,21 @@ func main() {
 		"batch_group":   "librb-http",
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < numMessages; i++ {
 		data := fmt.Sprintf("{\"message\": %d}", i)
 		f.Produce([]byte(data), opts, i)
 	}
 
+	var errors int
 	for report := range f.GetReports() {
 		r := report.(rbforwarder.Report)
-		// fmt.Printf("MESSAGE: %d\n", r.Opaque.(int))
-		// fmt.Printf("CODE: %d\n", r.Code)
-		// fmt.Printf("STATUS: %s\n", r.Status)
-		if r.Opaque.(int) == 9999 {
+		if r.Code > 0 {
+			errors += r.Code
+		}
+		if r.Opaque.(int) == numMessages-1 {
 			break
 		}
 	}
+
+	fmt.Printf("Sent %d messages with %d errors\n", numMessages, errors)
 }
