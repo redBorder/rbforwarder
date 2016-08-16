@@ -1,7 +1,10 @@
 package batcher
 
 import (
+	"bufio"
 	"bytes"
+	"compress/zlib"
+	"io"
 	"time"
 
 	"github.com/benbjohnson/clock"
@@ -11,24 +14,35 @@ import (
 // Batch groups multiple messages
 type Batch struct {
 	Group        string
+	Deflate      bool
 	Message      *utils.Message
-	Buff         *bytes.Buffer
+	Buf          *bytes.Buffer
+	Writer       io.Writer
 	MessageCount uint       // Current number of messages in the buffer
 	Next         utils.Next // Call to pass the message to the next handler
 	Timer        *clock.Timer
 }
 
 // NewBatch creates a new instance of Batch
-func NewBatch(m *utils.Message, group string, next utils.Next, clk clock.Clock,
-	timeoutMillis uint, ready chan *Batch) *Batch {
+func NewBatch(m *utils.Message, group string, deflate bool, next utils.Next,
+	clk clock.Clock, timeoutMillis uint, ready chan *Batch) *Batch {
 	payload, _ := m.PopPayload()
 	b := &Batch{
 		Group:        group,
+		Deflate:      deflate,
 		Next:         next,
 		Message:      m,
 		MessageCount: 1,
-		Buff:         bytes.NewBuffer(payload),
+		Buf:          new(bytes.Buffer),
 	}
+
+	if b.Deflate {
+		b.Writer = zlib.NewWriter(b.Buf)
+	} else {
+		b.Writer = bufio.NewWriter(b.Buf)
+	}
+
+	b.Writer.Write(payload)
 
 	if timeoutMillis != 0 {
 		b.Timer = clk.Timer(time.Duration(timeoutMillis) * time.Millisecond)
@@ -46,7 +60,13 @@ func NewBatch(m *utils.Message, group string, next utils.Next, clk clock.Clock,
 
 // Send the batch of messages to the next handler in the pipeline
 func (b *Batch) Send(cb func()) {
-	b.Message.PushPayload(b.Buff.Bytes())
+	if b.Deflate {
+		b.Writer.(*zlib.Writer).Flush()
+	} else {
+		b.Writer.(*bufio.Writer).Flush()
+	}
+
+	b.Message.PushPayload(b.Buf.Bytes())
 	cb()
 }
 
@@ -56,7 +76,7 @@ func (b *Batch) Add(m *utils.Message) {
 	b.Message.Reports.Push(newReport)
 
 	newPayload, _ := m.PopPayload()
-	b.Buff.Write(newPayload)
+	b.Writer.Write(newPayload)
 
 	b.MessageCount++
 }
