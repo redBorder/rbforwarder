@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/oleiade/lane"
 	"github.com/redBorder/rbforwarder/utils"
 )
 
@@ -63,9 +62,9 @@ func (f *RBForwarder) Close() {
 }
 
 // PushComponents adds a new component to the pipeline
-func (f *RBForwarder) PushComponents(components []utils.Composer, w []int) {
+func (f *RBForwarder) PushComponents(components []interface{}, w []int) {
 	for i, component := range components {
-		f.p.PushComponent(component, w[i])
+		f.p.PushComponent(component.(utils.Composer), w[i])
 	}
 }
 
@@ -90,15 +89,14 @@ func (f *RBForwarder) Produce(data []byte, opts map[string]interface{}, opaque i
 	seq := f.currentProducedID
 	f.currentProducedID++
 	m := utils.NewMessage()
-	r := report{
+	r := Report{
 		seq:    seq,
-		opaque: lane.NewStack(),
+		Opaque: opaque,
 	}
 
 	m.PushPayload(data)
 	m.Opts = opts
 	m.Reports.Push(r)
-	r.opaque.Push(opaque)
 
 	f.p.input <- m
 
