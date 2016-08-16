@@ -56,7 +56,7 @@ func TestHTTPSender(t *testing.T) {
 			sender.Init(0)
 
 			Convey("Then the config should be ok", func() {
-				So(sender.client, ShouldNotBeNil)
+				So(sender.Client, ShouldNotBeNil)
 			})
 		})
 
@@ -66,7 +66,7 @@ func TestHTTPSender(t *testing.T) {
 
 			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
-			sender.client = NewTestClient(401, func(req *http.Request) {
+			sender.Client = NewTestClient(401, func(req *http.Request) {
 				url = req.URL.String()
 			})
 
@@ -99,7 +99,7 @@ func TestHTTPSender(t *testing.T) {
 			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
 
-			sender.client = NewTestClient(200, func(req *http.Request) {
+			sender.Client = NewTestClient(200, func(req *http.Request) {
 				url = req.URL.String()
 			})
 
@@ -132,7 +132,7 @@ func TestHTTPSender(t *testing.T) {
 			m.PushPayload([]byte("Hello World"))
 			m.Opts["http_endpoint"] = "endpoint1"
 
-			sender.client = NewTestClient(200, func(req *http.Request) {
+			sender.Client = NewTestClient(200, func(req *http.Request) {
 				url = req.URL.String()
 			})
 
@@ -163,7 +163,7 @@ func TestHTTPSender(t *testing.T) {
 
 			m := utils.NewMessage()
 
-			sender.client = NewTestClient(200, func(req *http.Request) {
+			sender.Client = NewTestClient(200, func(req *http.Request) {
 				url = req.URL.String()
 			})
 
@@ -194,7 +194,7 @@ func TestHTTPSender(t *testing.T) {
 			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
 
-			sender.client = NewTestClient(200, func(req *http.Request) {
+			sender.Client = NewTestClient(200, func(req *http.Request) {
 				req.Write(nil)
 			})
 

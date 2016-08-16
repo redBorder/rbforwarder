@@ -12,6 +12,6 @@ type Done func(*Message, int, string)
 // Composer represents a component in the pipeline that performs a work on
 // a message
 type Composer interface {
-	Init(int) error
+	Init(int)
 	OnMessage(*Message, Next, Done)
 }

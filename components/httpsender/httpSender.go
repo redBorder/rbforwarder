@@ -18,7 +18,7 @@ type HTTPSender struct {
 	id     int
 	err    error
 	URL    string
-	client *http.Client
+	Client *http.Client
 }
 
 // Init initializes the HTTP component
@@ -26,7 +26,9 @@ func (s *HTTPSender) Init(id int) {
 	s.id = id
 
 	if govalidator.IsURL(s.URL) {
-		s.client = &http.Client{}
+		if s.Client == nil {
+			s.Client = &http.Client{}
+		}
 	} else {
 		s.err = errors.New("Invalid URL")
 	}
@@ -54,7 +56,7 @@ func (s *HTTPSender) OnMessage(m *utils.Message, next utils.Next, done utils.Don
 	}
 
 	buf := bytes.NewBuffer(data)
-	res, err := s.client.Post(u, "", buf)
+	res, err := s.Client.Post(u, "", buf)
 	if err != nil {
 		done(m, 1, "HTTPSender error: "+err.Error())
 		return

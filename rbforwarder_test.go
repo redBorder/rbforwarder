@@ -1,8 +1,14 @@
 package rbforwarder
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 
+	"github.com/redBorder/rbforwarder/components/batch"
+	"github.com/redBorder/rbforwarder/components/httpsender"
 	"github.com/redBorder/rbforwarder/utils"
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/mock"
@@ -12,9 +18,9 @@ type MockMiddleComponent struct {
 	mock.Mock
 }
 
-func (c *MockMiddleComponent) Init(id int) error {
-	args := c.Called()
-	return args.Error(0)
+func (c *MockMiddleComponent) Init(id int) {
+	c.Called()
+	return
 }
 
 func (c *MockMiddleComponent) OnMessage(
@@ -40,9 +46,8 @@ type MockComponent struct {
 	statusCode int
 }
 
-func (c *MockComponent) Init(id int) error {
-	args := c.Called()
-	return args.Error(0)
+func (c *MockComponent) Init(id int) {
+	c.Called()
 }
 
 func (c *MockComponent) OnMessage(
@@ -77,7 +82,7 @@ func TestRBForwarder(t *testing.T) {
 
 		component.On("Init").Return(nil).Times(numWorkers)
 
-		var components []utils.Composer
+		var components []interface{}
 		var instances []int
 		components = append(components, component)
 		instances = append(instances, numWorkers)
@@ -99,18 +104,18 @@ func TestRBForwarder(t *testing.T) {
 			)
 
 			Convey("\"Hello World\" message should be get by the worker", func() {
-				var lastReport report
+				var lastReport Report
 				var reports int
 				for r := range rbforwarder.GetReports() {
 					reports++
-					lastReport = r.(report)
+					lastReport = r.(Report)
 					rbforwarder.Close()
 				}
 
 				So(lastReport, ShouldNotBeNil)
 				So(reports, ShouldEqual, 1)
-				So(lastReport.code, ShouldEqual, 0)
-				So(lastReport.status, ShouldEqual, "OK")
+				So(lastReport.Code, ShouldEqual, 0)
+				So(lastReport.Status, ShouldEqual, "OK")
 				So(err, ShouldBeNil)
 
 				component.AssertExpectations(t)
@@ -148,14 +153,14 @@ func TestRBForwarder(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				var reports int
-				var lastReport report
+				var lastReport Report
 				for r := range rbforwarder.GetReports() {
 					reports++
-					lastReport = r.(report)
+					lastReport = r.(Report)
 					rbforwarder.Close()
 				}
 
-				opaque := lastReport.opaque.Pop().(string)
+				opaque := lastReport.Opaque.(string)
 				So(opaque, ShouldEqual, "This is an opaque")
 			})
 		})
@@ -178,17 +183,17 @@ func TestRBForwarder(t *testing.T) {
 				So(err, ShouldBeNil)
 
 				var reports int
-				var lastReport report
+				var lastReport Report
 				for r := range rbforwarder.GetReports() {
 					reports++
-					lastReport = r.(report)
+					lastReport = r.(Report)
 					rbforwarder.Close()
 				}
 
 				So(lastReport, ShouldNotBeNil)
 				So(reports, ShouldEqual, 1)
-				So(lastReport.status, ShouldEqual, "Fake Error")
-				So(lastReport.code, ShouldEqual, 99)
+				So(lastReport.Status, ShouldEqual, "Fake Error")
+				So(lastReport.Code, ShouldEqual, 99)
 				So(lastReport.retries, ShouldEqual, numRetries)
 
 				component.AssertExpectations(t)
@@ -233,7 +238,7 @@ func TestRBForwarder(t *testing.T) {
 				var reports int
 
 				for rep := range rbforwarder.GetOrderedReports() {
-					if rep.(report).opaque.Pop().(int) != reports {
+					if rep.(Report).Opaque.(int) != reports {
 						ordered = false
 					}
 					reports++
@@ -271,7 +276,7 @@ func TestRBForwarder(t *testing.T) {
 			component2.On("Init").Return(nil)
 		}
 
-		var components []utils.Composer
+		var components []interface{}
 		var instances []int
 
 		components = append(components, component1)
@@ -302,8 +307,8 @@ func TestRBForwarder(t *testing.T) {
 				for rep := range rbforwarder.GetReports() {
 					reports++
 
-					code := rep.(report).code
-					status := rep.(report).status
+					code := rep.(Report).Code
+					status := rep.(Report).Status
 					So(code, ShouldEqual, 0)
 					So(status, ShouldEqual, "OK")
 				}
@@ -319,4 +324,167 @@ func TestRBForwarder(t *testing.T) {
 			})
 		})
 	})
+}
+
+func BenchmarkNoBatch(b *testing.B) {
+	var components []interface{}
+	var workers []int
+
+	f := NewRBForwarder(Config{
+		Retries:   3,
+		Backoff:   5,
+		QueueSize: 1,
+	})
+
+	batch := &batcher.Batcher{
+		Config: batcher.Config{
+			TimeoutMillis: 1000,
+			Limit:         10000,
+		},
+	}
+	components = append(components, batch)
+	workers = append(workers, 1)
+
+	sender := &httpsender.HTTPSender{
+		URL:    "http://localhost:8888",
+		Client: NewTestClient(200, func(r *http.Request) {}),
+	}
+	components = append(components, sender)
+	workers = append(workers, 1)
+
+	f.PushComponents(components, workers)
+
+	opts := map[string]interface{}{
+		"http_endpoint": "librb-http",
+		"batch_group":   "librb-http",
+	}
+
+	for i := 0; i < b.N; i++ {
+		data := fmt.Sprintf("{\"message\": %d}", i)
+		f.Produce([]byte(data), opts, i)
+	}
+
+	for report := range f.GetReports() {
+		r := report.(Report)
+		if r.Code > 0 {
+			b.FailNow()
+		}
+		if r.Opaque.(int) == b.N-1 {
+			break
+		}
+	}
+}
+
+func NewTestClient(code int, cb func(*http.Request)) *http.Client {
+	server := httptest.NewServer(http.HandlerFunc(
+		func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(code)
+			cb(r)
+		}))
+
+	transport := &http.Transport{
+		Proxy: func(req *http.Request) (*url.URL, error) {
+			return url.Parse(server.URL)
+		},
+	}
+
+	return &http.Client{Transport: transport}
+}
+
+func BenchmarkLittleBatch(b *testing.B) {
+	var components []interface{}
+	var workers []int
+
+	f := NewRBForwarder(Config{
+		Retries:   3,
+		Backoff:   5,
+		QueueSize: b.N / 100,
+	})
+
+	batch := &batcher.Batcher{
+		Config: batcher.Config{
+			TimeoutMillis: 1000,
+			Limit:         10000,
+		},
+	}
+	components = append(components, batch)
+	workers = append(workers, 1)
+
+	sender := &httpsender.HTTPSender{
+		URL:    "http://localhost:8888",
+		Client: NewTestClient(200, func(r *http.Request) {}),
+	}
+	components = append(components, sender)
+	workers = append(workers, 1)
+
+	f.PushComponents(components, workers)
+
+	opts := map[string]interface{}{
+		"http_endpoint": "librb-http",
+		"batch_group":   "librb-http",
+	}
+
+	for i := 0; i < b.N; i++ {
+		data := fmt.Sprintf("{\"message\": %d}", i)
+		f.Produce([]byte(data), opts, i)
+	}
+
+	for report := range f.GetReports() {
+		r := report.(Report)
+		if r.Code > 0 {
+			b.FailNow()
+		}
+		if r.Opaque.(int) == b.N-1 {
+			break
+		}
+	}
+}
+
+func BenchmarkBigBatch(b *testing.B) {
+	var components []interface{}
+	var workers []int
+
+	f := NewRBForwarder(Config{
+		Retries:   3,
+		Backoff:   5,
+		QueueSize: b.N / 10,
+	})
+
+	batch := &batcher.Batcher{
+		Config: batcher.Config{
+			TimeoutMillis: 1000,
+			Limit:         10000,
+		},
+	}
+	components = append(components, batch)
+	workers = append(workers, 1)
+
+	sender := &httpsender.HTTPSender{
+		URL:    "http://localhost:8888",
+		Client: NewTestClient(200, func(r *http.Request) {}),
+	}
+	components = append(components, sender)
+	workers = append(workers, 1)
+
+	f.PushComponents(components, workers)
+
+	opts := map[string]interface{}{
+		"http_endpoint": "librb-http",
+		"batch_group":   "librb-http",
+	}
+
+	for i := 0; i < b.N; i++ {
+		data := fmt.Sprintf("{\"message\": %d}", i)
+		f.Produce([]byte(data), opts, i)
+	}
+
+	for report := range f.GetReports() {
+		r := report.(Report)
+		if r.Code > 0 {
+			b.FailNow()
+		}
+		if r.Opaque.(int) == b.N-1 {
+			break
+		}
+	}
 }
