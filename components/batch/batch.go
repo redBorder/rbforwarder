@@ -15,6 +15,7 @@ type Batch struct {
 	Buff         *bytes.Buffer
 	MessageCount uint       // Current number of messages in the buffer
 	Next         utils.Next // Call to pass the message to the next handler
+	Timer        *clock.Timer
 }
 
 // NewBatch creates a new instance of Batch
@@ -30,10 +31,10 @@ func NewBatch(m *utils.Message, group string, next utils.Next, clk clock.Clock,
 	}
 
 	if timeoutMillis != 0 {
-		timer := clk.Timer(time.Duration(timeoutMillis) * time.Millisecond)
+		b.Timer = clk.Timer(time.Duration(timeoutMillis) * time.Millisecond)
 
 		go func() {
-			<-timer.C
+			<-b.Timer.C
 			if b.MessageCount > 0 {
 				ready <- b
 			}
@@ -47,7 +48,6 @@ func NewBatch(m *utils.Message, group string, next utils.Next, clk clock.Clock,
 func (b *Batch) Send(cb func()) {
 	b.Message.PushPayload(b.Buff.Bytes())
 	cb()
-	b.Next(b.Message)
 }
 
 // Add merges a new message in the buffer
