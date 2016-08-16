@@ -1,6 +1,9 @@
 package batcher
 
 import (
+	"bufio"
+	"bytes"
+	"compress/zlib"
 	"testing"
 	"time"
 
@@ -27,6 +30,7 @@ func TestBatcher(t *testing.T) {
 				TimeoutMillis:     1000,
 				Limit:             10,
 				MaxPendingBatches: 10,
+				Deflate:           false,
 			},
 		}
 
@@ -67,7 +71,9 @@ func TestBatcher(t *testing.T) {
 				batch, exists := batcher.batches["group1"]
 				So(exists, ShouldBeTrue)
 
-				data := batch.Buff.Bytes()
+				batch.Writer.(*bufio.Writer).Flush()
+
+				data := batch.Buf.Bytes()
 				So(string(data), ShouldEqual, "Hello World")
 
 				opts := batch.Message.Opts
@@ -180,10 +186,12 @@ func TestBatcher(t *testing.T) {
 			batcher.OnMessage(m3, nd.Next, nil)
 
 			Convey("Each message should be in its group", func() {
-				group1 := batcher.batches["group1"].Buff.Bytes()
+				batcher.batches["group1"].Writer.(*bufio.Writer).Flush()
+				group1 := batcher.batches["group1"].Buf.Bytes()
 				So(string(group1), ShouldEqual, "MESSAGE 1")
 
-				group2 := batcher.batches["group2"].Buff.Bytes()
+				batcher.batches["group2"].Writer.(*bufio.Writer).Flush()
+				group2 := batcher.batches["group2"].Buf.Bytes()
 				So(string(group2), ShouldEqual, "MESSAGE 2MESSAGE 3")
 
 				So(len(batcher.batches), ShouldEqual, 2)
@@ -216,6 +224,62 @@ func TestBatcher(t *testing.T) {
 				So(len(batcher.batches), ShouldEqual, 0)
 
 				nd.AssertExpectations(t)
+			})
+		})
+	})
+
+	Convey("Given a batcher with compression", t, func() {
+		batcher := &Batcher{
+			Config: Config{
+				TimeoutMillis:     1000,
+				Limit:             10,
+				MaxPendingBatches: 10,
+				Deflate:           true,
+			},
+		}
+
+		batcher.Init(0)
+		batcher.clk = clock.NewMock()
+
+		Convey("When the max number of messages is reached", func() {
+			var messages []*utils.Message
+
+			for i := 0; i < int(batcher.Config.Limit); i++ {
+				m := utils.NewMessage()
+				m.PushPayload([]byte("ABC"))
+				m.Opts = map[string]interface{}{
+					"batch_group": "group1",
+				}
+				m.Reports.Push("Report")
+
+				messages = append(messages, m)
+			}
+
+			nd := new(NexterDoner)
+			nd.nextCalled = make(chan *utils.Message, 1)
+			nd.On("Next", mock.AnythingOfType("*utils.Message")).Times(1)
+
+			for i := 0; i < int(batcher.Config.Limit); i++ {
+				batcher.OnMessage(messages[i], nd.Next, nil)
+			}
+
+			Convey("The batch should be sent compressed", func() {
+				decompressed := make([]byte, 30)
+				m := <-nd.nextCalled
+				nd.AssertExpectations(t)
+
+				data, err := m.PopPayload()
+				buf := bytes.NewBuffer(data)
+
+				r, err := zlib.NewReader(buf)
+				r.Read(decompressed)
+				r.Close()
+
+				So(err, ShouldBeNil)
+				So(string(decompressed), ShouldEqual, "ABCABCABCABCABCABCABCABCABCABC")
+				So(m.Reports.Size(), ShouldEqual, batcher.Config.Limit)
+				So(batcher.batches["group1"], ShouldBeNil)
+				So(len(batcher.batches), ShouldEqual, 0)
 			})
 		})
 	})
