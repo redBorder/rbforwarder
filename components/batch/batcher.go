@@ -56,8 +56,8 @@ func (b *Batcher) Init(id int) {
 							})
 						}
 					} else {
-						b.batches[group] = NewBatch(message.m, group, message.next, b.clk,
-							b.Config.TimeoutMillis, b.readyBatches)
+						b.batches[group] = NewBatch(message.m, group, b.Config.Deflate,
+							message.next, b.clk, b.Config.TimeoutMillis, b.readyBatches)
 					}
 				}
 
