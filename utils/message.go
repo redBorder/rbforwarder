@@ -4,11 +4,12 @@ import (
 	"errors"
 
 	"github.com/oleiade/lane"
+	"github.com/streamrail/concurrent-map"
 )
 
 // Message is used to send data through the pipeline
 type Message struct {
-	Opts    map[string]interface{}
+	Opts    cmap.ConcurrentMap
 	Reports *lane.Stack
 
 	payload *lane.Stack
@@ -19,7 +20,7 @@ func NewMessage() *Message {
 	return &Message{
 		payload: lane.NewStack(),
 		Reports: lane.NewStack(),
-		Opts:    make(map[string]interface{}),
+		Opts:    cmap.New(),
 	}
 }
 

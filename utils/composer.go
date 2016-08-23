@@ -2,7 +2,7 @@ package utils
 
 // Next should be called by a component in order to pass the message to the next
 // component in the pipeline.
-type Next func(*Message)
+type Next func()
 
 // Done should be called by a component in order to return the message to the
 // message handler. Can be used by the last component to inform that the
@@ -12,6 +12,6 @@ type Done func(*Message, int, string)
 // Composer represents a component in the pipeline that performs a work on
 // a message
 type Composer interface {
-	Init(int)
-	OnMessage(*Message, Next, Done)
+	Spawn(int) Composer
+	OnMessage(*Message, Done)
 }

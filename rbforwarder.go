@@ -55,6 +55,11 @@ func NewRBForwarder(config Config) *RBForwarder {
 	return f
 }
 
+// Run starts getting messages
+func (f *RBForwarder) Run() {
+	f.p.Run()
+}
+
 // Close stops pending actions
 func (f *RBForwarder) Close() {
 	atomic.StoreUint32(&f.working, 0)
@@ -93,9 +98,8 @@ func (f *RBForwarder) Produce(data []byte, opts map[string]interface{}, opaque i
 		seq:    seq,
 		Opaque: opaque,
 	}
-
 	m.PushPayload(data)
-	m.Opts = opts
+	m.Opts.MSet(opts)
 	m.Reports.Push(r)
 
 	f.p.input <- m

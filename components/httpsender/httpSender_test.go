@@ -53,20 +53,20 @@ func TestHTTPSender(t *testing.T) {
 		}
 
 		Convey("When is initialized", func() {
-			sender.Init(0)
+			s := sender.Spawn(0).(*HTTPSender)
 
 			Convey("Then the config should be ok", func() {
-				So(sender.Client, ShouldNotBeNil)
+				So(s.Client, ShouldNotBeNil)
 			})
 		})
 
 		Convey("When a message is sent and the response code is >= 400", func() {
 			var url string
-			sender.Init(0)
+			s := sender.Spawn(0).(*HTTPSender)
 
 			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
-			sender.Client = NewTestClient(401, func(req *http.Request) {
+			s.Client = NewTestClient(401, func(req *http.Request) {
 				url = req.URL.String()
 			})
 
@@ -80,7 +80,7 @@ func TestHTTPSender(t *testing.T) {
 			d.On("Done", mock.AnythingOfType("*utils.Message"),
 				mock.AnythingOfType("int"), mock.AnythingOfType("string"))
 
-			sender.OnMessage(m, nil, d.Done)
+			s.OnMessage(m, d.Done)
 
 			Convey("Then the reporth should contain info about the error", func() {
 				result := <-d.doneCalled
@@ -94,12 +94,12 @@ func TestHTTPSender(t *testing.T) {
 
 		Convey("When a message is received without endpoint option", func() {
 			var url string
-			sender.Init(0)
+			s := sender.Spawn(0).(*HTTPSender)
 
 			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
 
-			sender.Client = NewTestClient(200, func(req *http.Request) {
+			s.Client = NewTestClient(200, func(req *http.Request) {
 				url = req.URL.String()
 			})
 
@@ -112,7 +112,7 @@ func TestHTTPSender(t *testing.T) {
 			d.On("Done", mock.AnythingOfType("*utils.Message"),
 				mock.AnythingOfType("int"), mock.AnythingOfType("string"))
 
-			sender.OnMessage(m, nil, d.Done)
+			s.OnMessage(m, d.Done)
 
 			Convey("Then the message should be sent via HTTP to the URL", func() {
 				result := <-d.doneCalled
@@ -126,13 +126,13 @@ func TestHTTPSender(t *testing.T) {
 
 		Convey("When a message is received with endpoint option", func() {
 			var url string
-			sender.Init(0)
+			s := sender.Spawn(0).(*HTTPSender)
 
 			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
-			m.Opts["http_endpoint"] = "endpoint1"
+			m.Opts.Set("http_endpoint", "endpoint1")
 
-			sender.Client = NewTestClient(200, func(req *http.Request) {
+			s.Client = NewTestClient(200, func(req *http.Request) {
 				url = req.URL.String()
 			})
 
@@ -145,7 +145,7 @@ func TestHTTPSender(t *testing.T) {
 			d.On("Done", mock.AnythingOfType("*utils.Message"),
 				mock.AnythingOfType("int"), mock.AnythingOfType("string"))
 
-			sender.OnMessage(m, nil, d.Done)
+			s.OnMessage(m, d.Done)
 
 			Convey("Then the message should be sent to the URL with endpoint as suffix", func() {
 				result := <-d.doneCalled
@@ -159,11 +159,11 @@ func TestHTTPSender(t *testing.T) {
 
 		Convey("When a message without payload is received", func() {
 			var url string
-			sender.Init(0)
+			s := sender.Spawn(0).(*HTTPSender)
 
 			m := utils.NewMessage()
 
-			sender.Client = NewTestClient(200, func(req *http.Request) {
+			s.Client = NewTestClient(200, func(req *http.Request) {
 				url = req.URL.String()
 			})
 
@@ -176,7 +176,7 @@ func TestHTTPSender(t *testing.T) {
 			d.On("Done", mock.AnythingOfType("*utils.Message"),
 				mock.AnythingOfType("int"), mock.AnythingOfType("string"))
 
-			sender.OnMessage(m, nil, d.Done)
+			s.OnMessage(m, d.Done)
 
 			Convey("Then the message should not be sent", func() {
 				result := <-d.doneCalled
@@ -189,12 +189,12 @@ func TestHTTPSender(t *testing.T) {
 		})
 
 		Convey("When a the HTTP client fails", func() {
-			sender.Init(0)
+			s := sender.Spawn(0).(*HTTPSender)
 
 			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
 
-			sender.Client = NewTestClient(200, func(req *http.Request) {
+			s.Client = NewTestClient(200, func(req *http.Request) {
 				req.Write(nil)
 			})
 
@@ -207,7 +207,7 @@ func TestHTTPSender(t *testing.T) {
 			d.On("Done", mock.AnythingOfType("*utils.Message"),
 				mock.AnythingOfType("int"), mock.AnythingOfType("string"))
 
-			sender.OnMessage(m, nil, d.Done)
+			s.OnMessage(m, d.Done)
 
 			Convey("Then the message should not be sent", func() {
 				result := <-d.doneCalled
@@ -221,12 +221,12 @@ func TestHTTPSender(t *testing.T) {
 
 	Convey("Given an HTTP sender with invalid URL", t, func() {
 		sender := &HTTPSender{}
-		sender.Init(0)
+		s := sender.Spawn(0).(*HTTPSender)
 
 		Convey("When try to send messages", func() {
 			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
-			m.Opts["http_endpoint"] = "endpoint1"
+			m.Opts.Set("http_endpoint", "endpoint1")
 
 			d := &Doner{
 				doneCalled: make(chan struct {
@@ -238,10 +238,10 @@ func TestHTTPSender(t *testing.T) {
 			d.On("Done", mock.AnythingOfType("*utils.Message"),
 				mock.AnythingOfType("int"), mock.AnythingOfType("string"))
 
-			sender.OnMessage(m, nil, d.Done)
+			s.OnMessage(m, d.Done)
 
 			Convey("Then should fail to send messages", func() {
-				So(sender.err, ShouldNotBeNil)
+				So(s.err, ShouldNotBeNil)
 				result := <-d.doneCalled
 				So(result.status, ShouldEqual, "Invalid URL")
 				So(result.code, ShouldBeGreaterThan, 0)

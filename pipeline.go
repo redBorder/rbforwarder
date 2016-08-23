@@ -1,20 +1,20 @@
 package rbforwarder
 
 import (
-	"sync"
-
 	"github.com/oleiade/lane"
 	"github.com/redBorder/rbforwarder/utils"
 )
 
-type component struct {
-	pool    chan chan *utils.Message
-	workers int
+// Component contains information about a pipeline component
+type Component struct {
+	workers   int
+	composser utils.Composer
+	pool      chan chan *utils.Message
 }
 
 // pipeline contains the components
 type pipeline struct {
-	components []component
+	components []Component
 	input      chan *utils.Message
 	retry      chan *utils.Message
 	output     chan *utils.Message
@@ -22,20 +22,70 @@ type pipeline struct {
 
 // newPipeline creates a new Backend
 func newPipeline(input, retry, output chan *utils.Message) *pipeline {
-	var wg sync.WaitGroup
-	p := &pipeline{
+	return &pipeline{
 		input:  input,
 		retry:  retry,
 		output: output,
 	}
+}
 
-	wg.Add(1)
+// PushComponent adds a new component to the pipeline
+func (p *pipeline) PushComponent(composser utils.Composer, w int) {
+	p.components = append(p.components, struct {
+		workers   int
+		composser utils.Composer
+		pool      chan chan *utils.Message
+	}{
+		workers:   w,
+		composser: composser,
+		pool:      make(chan chan *utils.Message, w),
+	})
+}
+
+func (p *pipeline) Run() {
+	for index, component := range p.components {
+		for w := 0; w < component.workers; w++ {
+			go func(w, index int, component Component) {
+				component.composser = component.composser.Spawn(w)
+				messages := make(chan *utils.Message)
+				component.pool <- messages
+
+				for m := range messages {
+					component.composser.OnMessage(m,
+						// Done function
+						func(m *utils.Message, code int, status string) {
+							// If there is another component next in the pipeline send the
+							// messate to it. I other case send the message to the report
+							// handler
+							if len(p.components)-1 > index {
+								nextWorker := <-p.components[index+1].pool
+								nextWorker <- m
+							} else {
+								reports := lane.NewStack()
+
+								for !m.Reports.Empty() {
+									rep := m.Reports.Pop().(Report)
+									rep.Code = code
+									rep.Status = status
+									reports.Push(rep)
+								}
+
+								m.Reports = reports
+								p.output <- m
+							}
+						})
+
+					component.pool <- messages
+				}
+			}(w, index, component)
+		}
+	}
+
 	go func() {
-		wg.Done()
-
 		for {
 			select {
 			case m, ok := <-p.input:
+
 				// If input channel has been closed, close output channel
 				if !ok {
 					for _, component := range p.components {
@@ -56,55 +106,4 @@ func newPipeline(input, retry, output chan *utils.Message) *pipeline {
 			}
 		}
 	}()
-
-	wg.Wait()
-	return p
-}
-
-// PushComponent adds a new component to the pipeline
-func (p *pipeline) PushComponent(composser utils.Composer, w int) {
-	var wg sync.WaitGroup
-	c := component{
-		workers: w,
-		pool:    make(chan chan *utils.Message, w),
-	}
-
-	index := len(p.components)
-	p.components = append(p.components, c)
-
-	for i := 0; i < w; i++ {
-		composser.Init(i)
-
-		worker := make(chan *utils.Message)
-		p.components[index].pool <- worker
-
-		wg.Add(1)
-		go func(i int) {
-			wg.Done()
-			for m := range worker {
-				composser.OnMessage(m, func(m *utils.Message) {
-					if len(p.components) >= index {
-						nextWorker := <-p.components[index+1].pool
-						nextWorker <- m
-					}
-				}, func(m *utils.Message, code int, status string) {
-					reports := lane.NewStack()
-
-					for !m.Reports.Empty() {
-						rep := m.Reports.Pop().(Report)
-						rep.Code = code
-						rep.Status = status
-						reports.Push(rep)
-					}
-
-					m.Reports = reports
-					p.output <- m
-				})
-
-				p.components[index].pool <- worker
-			}
-		}(i)
-	}
-
-	wg.Wait()
 }

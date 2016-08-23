@@ -21,8 +21,10 @@ type HTTPSender struct {
 	Client *http.Client
 }
 
-// Init initializes the HTTP component
-func (s *HTTPSender) Init(id int) {
+// Spawn initializes the HTTP component
+func (httpsender *HTTPSender) Spawn(id int) utils.Composer {
+	s := *httpsender
+
 	s.id = id
 
 	if govalidator.IsURL(s.URL) {
@@ -32,14 +34,16 @@ func (s *HTTPSender) Init(id int) {
 	} else {
 		s.err = errors.New("Invalid URL")
 	}
+
+	return &s
 }
 
 // OnMessage is called when a new message should be sent via HTTP
-func (s *HTTPSender) OnMessage(m *utils.Message, next utils.Next, done utils.Done) {
+func (httpsender *HTTPSender) OnMessage(m *utils.Message, done utils.Done) {
 	var u string
 
-	if s.err != nil {
-		done(m, 2, s.err.Error())
+	if httpsender.err != nil {
+		done(m, 2, httpsender.err.Error())
 		return
 	}
 
@@ -49,14 +53,14 @@ func (s *HTTPSender) OnMessage(m *utils.Message, next utils.Next, done utils.Don
 		return
 	}
 
-	if endpoint, exists := m.Opts["http_endpoint"]; exists {
-		u = s.URL + "/" + endpoint.(string)
+	if endpoint, exists := m.Opts.Get("http_endpoint"); exists {
+		u = httpsender.URL + "/" + endpoint.(string)
 	} else {
-		u = s.URL
+		u = httpsender.URL
 	}
 
 	buf := bytes.NewBuffer(data)
-	res, err := s.Client.Post(u, "", buf)
+	res, err := httpsender.Client.Post(u, "", buf)
 	if err != nil {
 		done(m, 1, "HTTPSender error: "+err.Error())
 		return

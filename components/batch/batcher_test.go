@@ -10,17 +10,18 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/redBorder/rbforwarder/utils"
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/streamrail/concurrent-map"
 	"github.com/stretchr/testify/mock"
 )
 
-type NexterDoner struct {
+type Doner struct {
 	mock.Mock
-	nextCalled chan *utils.Message
+	doneCalled chan *utils.Message
 }
 
-func (nd *NexterDoner) Next(m *utils.Message) {
-	nd.Called(m)
-	nd.nextCalled <- m
+func (d *Doner) Done(m *utils.Message, code int, status string) {
+	d.Called(m, code, status)
+	d.doneCalled <- m
 }
 
 func TestBatcher(t *testing.T) {
@@ -34,42 +35,42 @@ func TestBatcher(t *testing.T) {
 			},
 		}
 
-		batcher.Init(0)
-		batcher.clk = clock.NewMock()
+		b := batcher.Spawn(0).(*Batcher)
+		b.clk = clock.NewMock()
 
 		Convey("When a message is received with no batch group", func() {
 			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
 
-			nd := new(NexterDoner)
-			nd.nextCalled = make(chan *utils.Message, 1)
-			nd.On("Next", mock.AnythingOfType("*utils.Message")).Times(1)
+			d := new(Doner)
+			d.doneCalled = make(chan *utils.Message, 1)
+			d.On("Done", mock.AnythingOfType("*utils.Message"), 0, "").Times(1)
 
-			batcher.OnMessage(m, nd.Next, nil)
+			b.OnMessage(m, d.Done)
+			result := <-d.doneCalled
 
-			Convey("Message should be present on the batch", func() {
-				nd.AssertExpectations(t)
-				m := <-nd.nextCalled
-				So(len(batcher.batches), ShouldEqual, 0)
-				payload, err := m.PopPayload()
+			Convey("Then the message should be sent as is", func() {
+				So(b.batches.Count(), ShouldEqual, 0)
+				payload, err := result.PopPayload()
 				So(err, ShouldBeNil)
 				So(string(payload), ShouldEqual, "Hello World")
+
+				d.AssertExpectations(t)
 			})
 		})
 
-		Convey("When a message is received, but not yet sent", func() {
+		Convey("When a message is received by the worker, but not yet sent", func() {
 			m := utils.NewMessage()
 			m.PushPayload([]byte("Hello World"))
-			m.Opts = map[string]interface{}{
-				"batch_group": "group1",
-			}
-			m.Reports.Push("Report")
+			m.Opts = cmap.New()
+			m.Opts.Set("batch_group", "group1")
 
-			batcher.OnMessage(m, nil, nil)
+			b.OnMessage(m, nil)
 
 			Convey("Message should be present on the batch", func() {
-				batch, exists := batcher.batches["group1"]
+				tmp, exists := b.batches.Get("group1")
 				So(exists, ShouldBeTrue)
+				batch := tmp.(*Batch)
 
 				batch.Writer.(*bufio.Writer).Flush()
 
@@ -77,47 +78,45 @@ func TestBatcher(t *testing.T) {
 				So(string(data), ShouldEqual, "Hello World")
 
 				opts := batch.Message.Opts
-				So(opts["batch_group"], ShouldEqual, "group1")
+				group, ok := opts.Get("batch_group")
+				So(ok, ShouldBeTrue)
+				So(group.(string), ShouldEqual, "group1")
 
-				report := batch.Message.Reports.Pop().(string)
-				So(report, ShouldEqual, "Report")
-
-				So(len(batcher.batches), ShouldEqual, 1)
+				So(b.batches.Count(), ShouldEqual, 1)
 			})
 		})
 
 		Convey("When the max number of messages is reached", func() {
 			var messages []*utils.Message
 
-			for i := 0; i < int(batcher.Config.Limit); i++ {
+			for i := 0; i < int(b.Config.Limit); i++ {
 				m := utils.NewMessage()
 				m.PushPayload([]byte("ABC"))
-				m.Opts = map[string]interface{}{
-					"batch_group": "group1",
-				}
-				m.Reports.Push("Report")
+				m.Opts = cmap.New()
+				m.Opts.Set("batch_group", "group1")
 
 				messages = append(messages, m)
 			}
 
-			nd := new(NexterDoner)
-			nd.nextCalled = make(chan *utils.Message, 1)
-			nd.On("Next", mock.AnythingOfType("*utils.Message")).Times(1)
+			d := new(Doner)
+			d.doneCalled = make(chan *utils.Message, 1)
+			d.On("Done", mock.AnythingOfType("*utils.Message"), 0, "limit").Times(1)
 
-			for i := 0; i < int(batcher.Config.Limit); i++ {
-				batcher.OnMessage(messages[i], nd.Next, nil)
+			for i := 0; i < int(b.Config.Limit); i++ {
+				b.OnMessage(messages[i], d.Done)
 			}
 
-			Convey("The batch should be sent", func() {
-				m := <-nd.nextCalled
-				nd.AssertExpectations(t)
+			Convey("Then the batch should be sent", func() {
+				m := <-d.doneCalled
 				data, err := m.PopPayload()
 
 				So(err, ShouldBeNil)
 				So(string(data), ShouldEqual, "ABCABCABCABCABCABCABCABCABCABC")
-				So(m.Reports.Size(), ShouldEqual, batcher.Config.Limit)
-				So(batcher.batches["group1"], ShouldBeNil)
-				So(len(batcher.batches), ShouldEqual, 0)
+				group1, _ := b.batches.Get("group1")
+				So(group1, ShouldBeNil)
+				So(b.batches.Count(), ShouldEqual, 0)
+
+				d.AssertExpectations(t)
 			})
 		})
 
@@ -127,32 +126,36 @@ func TestBatcher(t *testing.T) {
 			for i := 0; i < 5; i++ {
 				m := utils.NewMessage()
 				m.PushPayload([]byte("Hello World"))
-				m.Opts = map[string]interface{}{
-					"batch_group": "group1",
-				}
-				m.Reports.Push("Report")
+				m.Opts = cmap.New()
+				m.Opts.Set("batch_group", "group1")
 
 				messages = append(messages, m)
 			}
 
-			nd := new(NexterDoner)
-			nd.nextCalled = make(chan *utils.Message, 1)
-			nd.On("Next", mock.AnythingOfType("*utils.Message")).Times(1)
+			d := new(Doner)
+			d.doneCalled = make(chan *utils.Message, 1)
+			d.On("Done", mock.AnythingOfType("*utils.Message"), 0, "timeout").Times(1)
 
 			for i := 0; i < 5; i++ {
-				batcher.OnMessage(messages[i], nd.Next, nil)
+				b.OnMessage(messages[i], d.Done)
 			}
 
-			clk := batcher.clk.(*clock.Mock)
+			clk := b.clk.(*clock.Mock)
 
 			Convey("The batch should be sent", func() {
 				clk.Add(500 * time.Millisecond)
-				So(batcher.batches["group1"], ShouldNotBeNil)
+
+				group1, _ := b.batches.Get("group1")
+				So(group1.(*Batch), ShouldNotBeNil)
+
 				clk.Add(500 * time.Millisecond)
-				<-nd.nextCalled
-				So(batcher.batches["group1"], ShouldBeNil)
-				So(len(batcher.batches), ShouldEqual, 0)
-				nd.AssertExpectations(t)
+
+				<-d.doneCalled
+				group1, _ = b.batches.Get("group1")
+				So(group1, ShouldBeNil)
+				So(b.batches.Count(), ShouldEqual, 0)
+
+				d.AssertExpectations(t)
 			})
 		})
 
@@ -160,56 +163,58 @@ func TestBatcher(t *testing.T) {
 			m1 := utils.NewMessage()
 			m1.PushPayload([]byte("MESSAGE 1"))
 			m1.Reports.Push("Report 1")
-			m1.Opts = map[string]interface{}{
-				"batch_group": "group1",
-			}
+			m1.Opts = cmap.New()
+			m1.Opts.Set("batch_group", "group1")
 
 			m2 := utils.NewMessage()
 			m2.PushPayload([]byte("MESSAGE 2"))
 			m2.Reports.Push("Report 2")
-			m2.Opts = map[string]interface{}{
-				"batch_group": "group2",
-			}
+			m2.Opts = cmap.New()
+			m2.Opts.Set("batch_group", "group2")
+
 			m3 := utils.NewMessage()
 			m3.PushPayload([]byte("MESSAGE 3"))
 			m3.Reports.Push("Report 3")
-			m3.Opts = map[string]interface{}{
-				"batch_group": "group2",
-			}
+			m3.Opts = cmap.New()
+			m3.Opts.Set("batch_group", "group2")
 
-			nd := new(NexterDoner)
-			nd.nextCalled = make(chan *utils.Message, 2)
-			nd.On("Next", mock.AnythingOfType("*utils.Message")).Times(2)
+			d := new(Doner)
+			d.doneCalled = make(chan *utils.Message, 2)
+			d.On("Done", mock.AnythingOfType("*utils.Message"), 0, "timeout").Times(2)
 
-			batcher.OnMessage(m1, nd.Next, nil)
-			batcher.OnMessage(m2, nd.Next, nil)
-			batcher.OnMessage(m3, nd.Next, nil)
+			b.OnMessage(m1, d.Done)
+			b.OnMessage(m2, d.Done)
+			b.OnMessage(m3, d.Done)
 
-			Convey("Each message should be in its group", func() {
-				batcher.batches["group1"].Writer.(*bufio.Writer).Flush()
-				group1 := batcher.batches["group1"].Buf.Bytes()
+			Convey("Then each message should be in its group", func() {
+				tmp, _ := b.batches.Get("group1")
+				batch := tmp.(*Batch)
+				batch.Writer.(*bufio.Writer).Flush()
+				group1 := batch.Buf.Bytes()
 				So(string(group1), ShouldEqual, "MESSAGE 1")
 
-				batcher.batches["group2"].Writer.(*bufio.Writer).Flush()
-				group2 := batcher.batches["group2"].Buf.Bytes()
+				tmp, _ = b.batches.Get("group2")
+				batch = tmp.(*Batch)
+				batch.Writer.(*bufio.Writer).Flush()
+				group2 := batch.Buf.Bytes()
 				So(string(group2), ShouldEqual, "MESSAGE 2MESSAGE 3")
 
-				So(len(batcher.batches), ShouldEqual, 2)
+				So(b.batches.Count(), ShouldEqual, 2)
 			})
 
-			Convey("After a timeout the messages should be sent", func() {
-				clk := batcher.clk.(*clock.Mock)
-				So(len(batcher.batches), ShouldEqual, 2)
+			Convey("Then after a timeout the messages should be sent", func() {
+				clk := b.clk.(*clock.Mock)
+				So(b.batches.Count(), ShouldEqual, 2)
 
-				clk.Add(time.Duration(batcher.Config.TimeoutMillis) * time.Millisecond)
+				clk.Add(time.Duration(b.Config.TimeoutMillis) * time.Millisecond)
 
-				group1 := <-nd.nextCalled
+				group1 := <-d.doneCalled
 				group1Data, err := group1.PopPayload()
 				report1 := group1.Reports.Pop().(string)
 				So(err, ShouldBeNil)
 				So(report1, ShouldEqual, "Report 1")
 
-				group2 := <-nd.nextCalled
+				group2 := <-d.doneCalled
 				group2Data, err := group2.PopPayload()
 				So(err, ShouldBeNil)
 				report3 := group2.Reports.Pop().(string)
@@ -219,11 +224,14 @@ func TestBatcher(t *testing.T) {
 
 				So(string(group1Data), ShouldEqual, "MESSAGE 1")
 				So(string(group2Data), ShouldEqual, "MESSAGE 2MESSAGE 3")
-				So(batcher.batches["group1"], ShouldBeNil)
-				So(batcher.batches["group2"], ShouldBeNil)
-				So(len(batcher.batches), ShouldEqual, 0)
+				batch, _ := b.batches.Get("group1")
+				So(batch, ShouldBeNil)
 
-				nd.AssertExpectations(t)
+				batch, _ = b.batches.Get("group2")
+				So(batch, ShouldBeNil)
+				So(b.batches.Count(), ShouldEqual, 0)
+
+				d.AssertExpectations(t)
 			})
 		})
 	})
@@ -238,36 +246,33 @@ func TestBatcher(t *testing.T) {
 			},
 		}
 
-		batcher.Init(0)
-		batcher.clk = clock.NewMock()
+		b := batcher.Spawn(0).(*Batcher)
+		b.clk = clock.NewMock()
 
 		Convey("When the max number of messages is reached", func() {
 			var messages []*utils.Message
 
-			for i := 0; i < int(batcher.Config.Limit); i++ {
+			for i := 0; i < int(b.Config.Limit); i++ {
 				m := utils.NewMessage()
 				m.PushPayload([]byte("ABC"))
-				m.Opts = map[string]interface{}{
-					"batch_group": "group1",
-				}
+				m.Opts = cmap.New()
+				m.Opts.Set("batch_group", "group1")
 				m.Reports.Push("Report")
 
 				messages = append(messages, m)
 			}
 
-			nd := new(NexterDoner)
-			nd.nextCalled = make(chan *utils.Message, 1)
-			nd.On("Next", mock.AnythingOfType("*utils.Message")).Times(1)
+			d := new(Doner)
+			d.doneCalled = make(chan *utils.Message, 1)
+			d.On("Done", mock.AnythingOfType("*utils.Message"), 0, "limit").Times(1)
 
-			for i := 0; i < int(batcher.Config.Limit); i++ {
-				batcher.OnMessage(messages[i], nd.Next, nil)
+			for i := 0; i < int(b.Config.Limit); i++ {
+				b.OnMessage(messages[i], d.Done)
 			}
 
 			Convey("The batch should be sent compressed", func() {
+				m := <-d.doneCalled
 				decompressed := make([]byte, 30)
-				m := <-nd.nextCalled
-				nd.AssertExpectations(t)
-
 				data, err := m.PopPayload()
 				buf := bytes.NewBuffer(data)
 
@@ -277,9 +282,12 @@ func TestBatcher(t *testing.T) {
 
 				So(err, ShouldBeNil)
 				So(string(decompressed), ShouldEqual, "ABCABCABCABCABCABCABCABCABCABC")
-				So(m.Reports.Size(), ShouldEqual, batcher.Config.Limit)
-				So(batcher.batches["group1"], ShouldBeNil)
-				So(len(batcher.batches), ShouldEqual, 0)
+				So(m.Reports.Size(), ShouldEqual, b.Config.Limit)
+				batch, _ := b.batches.Get("group1")
+				So(batch, ShouldBeNil)
+				So(b.batches.Count(), ShouldEqual, 0)
+
+				d.AssertExpectations(t)
 			})
 		})
 	})

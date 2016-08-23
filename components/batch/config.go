@@ -4,6 +4,6 @@ package batcher
 type Config struct {
 	Deflate           bool
 	TimeoutMillis     uint
-	Limit             uint
+	Limit             uint64
 	MaxPendingBatches uint
 }

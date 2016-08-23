@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"compress/zlib"
 	"io"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/benbjohnson/clock"
@@ -18,22 +20,26 @@ type Batch struct {
 	Message      *utils.Message
 	Buf          *bytes.Buffer
 	Writer       io.Writer
-	MessageCount uint       // Current number of messages in the buffer
-	Next         utils.Next // Call to pass the message to the next handler
+	MessageCount uint64     // Current number of messages in the buffer
+	Done         utils.Done // Call to pass the message to the next handler
 	Timer        *clock.Timer
+	Sent         bool
 }
 
 // NewBatch creates a new instance of Batch
-func NewBatch(m *utils.Message, group string, deflate bool, next utils.Next,
+func NewBatch(m *utils.Message, group string, deflate bool, done utils.Done,
 	clk clock.Clock, timeoutMillis uint, ready chan *Batch) *Batch {
+	var wg sync.WaitGroup
+
 	payload, _ := m.PopPayload()
 	b := &Batch{
 		Group:        group,
 		Deflate:      deflate,
-		Next:         next,
+		Done:         done,
 		Message:      m,
 		MessageCount: 1,
 		Buf:          new(bytes.Buffer),
+		Sent:         false,
 	}
 
 	if b.Deflate {
@@ -44,17 +50,20 @@ func NewBatch(m *utils.Message, group string, deflate bool, next utils.Next,
 
 	b.Writer.Write(payload)
 
-	if timeoutMillis != 0 {
+	if timeoutMillis > 0 {
 		b.Timer = clk.Timer(time.Duration(timeoutMillis) * time.Millisecond)
 
+		wg.Add(1)
 		go func() {
+			wg.Done()
 			<-b.Timer.C
-			if b.MessageCount > 0 {
+			if atomic.LoadUint64(&b.MessageCount) > 0 {
 				ready <- b
 			}
 		}()
 	}
 
+	wg.Wait()
 	return b
 }
 
@@ -78,5 +87,5 @@ func (b *Batch) Add(m *utils.Message) {
 	newPayload, _ := m.PopPayload()
 	b.Writer.Write(newPayload)
 
-	b.MessageCount++
+	atomic.AddUint64(&b.MessageCount, 1)
 }

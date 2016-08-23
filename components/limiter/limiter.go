@@ -49,7 +49,7 @@ func (l *Limiter) OnMessage(m *utils.Message, next utils.Next, done utils.Done) 
 			m.PushPayload(payload)
 		}
 	}
-	next(m)
+	done(m, 0, "")
 
 	if l.config.MessageLimit > 0 && l.currentMessages >= l.config.MessageLimit ||
 		l.config.BytesLimit > 0 && l.currentBytes >= l.config.BytesLimit {
