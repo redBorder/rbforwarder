@@ -24,4 +24,4 @@ script:
 
 after_success:
   - make coverage
-  - goveralls -coverprofile=coverage-out -service=travis-ci
+  - goveralls -coverprofile=coverage.out -service=travis-ci
