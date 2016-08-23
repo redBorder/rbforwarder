@@ -9,7 +9,7 @@ import (
 )
 
 // Version is the current tag
-var Version = "0.4-beta3"
+var Version = "0.5"
 
 var log = logrus.New()
 
