@@ -15,8 +15,8 @@ type Nexter struct {
 	nextCalled chan *utils.Message
 }
 
-func (n *Nexter) Next(m *utils.Message) {
-	n.Called(m)
+func (n *Nexter) Done(m *utils.Message, code int, status string) {
+	n.Called(m, code, status)
 	n.nextCalled <- m
 }
 
@@ -36,10 +36,10 @@ func TestHTTPSender(t *testing.T) {
 			n := Nexter{
 				nextCalled: make(chan *utils.Message, limiter.config.MessageLimit*2),
 			}
-			n.On("Next", mock.AnythingOfType("*utils.Message"))
+			n.On("Done", mock.AnythingOfType("*utils.Message"), 0, "")
 
 			for i := uint64(0); i < limiter.config.MessageLimit; i++ {
-				limiter.OnMessage(nil, n.Next, nil)
+				limiter.OnMessage(nil, nil, n.Done)
 			}
 
 			Convey("Then the limiter should be paused", func() {
@@ -49,7 +49,7 @@ func TestHTTPSender(t *testing.T) {
 
 			Convey("Then after 1 second the limiter should be ready again", func() {
 				clk.Add(1 * time.Second)
-				limiter.OnMessage(nil, n.Next, nil)
+				limiter.OnMessage(nil, nil, n.Done)
 				So(limiter.currentMessages, ShouldEqual, 1)
 				So(limiter.paused, ShouldBeFalse)
 			})
@@ -70,14 +70,14 @@ func TestHTTPSender(t *testing.T) {
 			n := Nexter{
 				nextCalled: make(chan *utils.Message, 100),
 			}
-			n.On("Next", mock.AnythingOfType("*utils.Message"))
+			n.On("Done", mock.AnythingOfType("*utils.Message"), 0, "")
 
 			Convey("Then the limiter should not be paused after 750 bytes", func() {
 				for i := uint64(0); i < 3; i++ {
 					m := utils.NewMessage()
 					payload := make([]byte, 250)
 					m.PushPayload(payload)
-					limiter.OnMessage(m, n.Next, nil)
+					limiter.OnMessage(m, nil, n.Done)
 				}
 
 				So(limiter.currentBytes, ShouldEqual, 750)
@@ -89,7 +89,7 @@ func TestHTTPSender(t *testing.T) {
 					m := utils.NewMessage()
 					payload := make([]byte, 250)
 					m.PushPayload(payload)
-					limiter.OnMessage(m, n.Next, nil)
+					limiter.OnMessage(m, nil, n.Done)
 				}
 
 				So(limiter.currentBytes, ShouldEqual, 1000)
@@ -103,7 +103,7 @@ func TestHTTPSender(t *testing.T) {
 				m := utils.NewMessage()
 				payload := make([]byte, 250)
 				m.PushPayload(payload)
-				limiter.OnMessage(m, n.Next, nil)
+				limiter.OnMessage(m, nil, n.Done)
 
 				So(limiter.currentBytes, ShouldEqual, 250)
 				So(limiter.paused, ShouldBeFalse)
@@ -129,10 +129,10 @@ func TestHTTPSender(t *testing.T) {
 			n := Nexter{
 				nextCalled: make(chan *utils.Message, limiter.config.MessageLimit*2),
 			}
-			n.On("Next", mock.AnythingOfType("*utils.Message"))
+			n.On("Done", mock.AnythingOfType("*utils.Message"), 0, "")
 
 			for i := uint64(0); i < limiter.config.MessageLimit; i++ {
-				limiter.OnMessage(nil, n.Next, nil)
+				limiter.OnMessage(nil, nil, n.Done)
 			}
 
 			Convey("Then should be 2 burst available", func() {
@@ -140,7 +140,7 @@ func TestHTTPSender(t *testing.T) {
 			})
 			Convey("Then messages are not blocked after the limit", func() {
 				for i := uint64(0); i < limiter.config.MessageLimit; i++ {
-					limiter.OnMessage(nil, n.Next, nil)
+					limiter.OnMessage(nil, nil, n.Done)
 				}
 				So(limiter.currentMessages, ShouldEqual, 100)
 			})
