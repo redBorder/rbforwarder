@@ -25,14 +25,20 @@ vet:
 
 test:
 	@printf "$(MKL_YELLOW)Running tests$(MKL_CLR_RESET)\n"
-	go test -race ./... -tags=integration
+	go test -v -race -tags=integration ./...
 	@printf "$(MKL_GREEN)Test passed$(MKL_CLR_RESET)\n"
 
 coverage:
 	@printf "$(MKL_YELLOW)Computing coverage$(MKL_CLR_RESET)\n"
-	@overalls -covermode=set -project=github.com/redBorder/rbforwarder
-	@go tool cover -func overalls.coverprofile
-	@rm -f overalls.coverprofile
+	@go test -covermode=count -coverprofile=rbforwarder.part -tags=integration
+	@go test -covermode=count -coverprofile=batch.part -tags=integration ./components/batch
+	@go test -covermode=count -coverprofile=httpsender.part -tags=integration ./components/httpsender
+	@go test -covermode=count -coverprofile=limiter.part -tags=integration ./components/limiter
+	@go test -covermode=count -coverprofile=utils.part -tags=integration ./utils
+	@echo "mode: count" > coverage.out
+	@grep -h -v "mode: count" *.part >> coverage.out
+	@go tool cover -func coverage.out
+	@rm -f *.part coverage.out
 
 get:
 	@printf "$(MKL_YELLOW)Installing deps$(MKL_CLR_RESET)\n"
