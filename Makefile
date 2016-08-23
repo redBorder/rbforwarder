@@ -20,12 +20,12 @@ errcheck:
 	errcheck -ignoretests -verbose ./...
 
 vet:
-	@printf "$(MKL_YELLOW)Runing go vet$(MKL_CLR_RESET)\n"
+	@printf "$(MKL_YELLOW)Running go vet$(MKL_CLR_RESET)\n"
 	go vet ./...
 
 test:
-	@printf "$(MKL_YELLOW)Runing tests$(MKL_CLR_RESET)\n"
-	go test -race ./...
+	@printf "$(MKL_YELLOW)Running tests$(MKL_CLR_RESET)\n"
+	go test -race ./... -tags=integration
 	@printf "$(MKL_GREEN)Test passed$(MKL_CLR_RESET)\n"
 
 coverage:
