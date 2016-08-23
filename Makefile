@@ -38,7 +38,6 @@ coverage:
 	@echo "mode: count" > coverage.out
 	@grep -h -v "mode: count" *.part >> coverage.out
 	@go tool cover -func coverage.out
-	@rm -f *.part coverage.out
 
 get:
 	@printf "$(MKL_YELLOW)Installing deps$(MKL_CLR_RESET)\n"
