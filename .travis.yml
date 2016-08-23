@@ -17,13 +17,11 @@ script:
 
 install:
   - go get github.com/mattn/goveralls
-  - go get github.com/go-playground/overalls
   - go get -t ./...
 
 script:
-  - go test -v -race -cover ./...
+  - make test
 
 after_success:
-  - overalls -covermode=set -project=github.com/redBorder/rbforwarder
-  - go tool cover -func overalls.coverprofile
-  - goveralls -coverprofile=overalls.coverprofile -service=travis-ci
+  - make coverage
+  - goveralls -coverprofile=coverage-out -service=travis-ci
