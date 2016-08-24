@@ -49,7 +49,10 @@ func NewTestClient(code int, cb func(*http.Request)) *http.Client {
 func TestHTTPSender(t *testing.T) {
 	Convey("Given an HTTP sender with defined URL", t, func() {
 		sender := &HTTPSender{
-			URL: "http://example.com",
+			Config: Config{
+				URL:     "http://example.com",
+				Workers: 1,
+			},
 		}
 
 		Convey("When is initialized", func() {

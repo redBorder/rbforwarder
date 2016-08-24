@@ -67,9 +67,9 @@ func (f *RBForwarder) Close() {
 }
 
 // PushComponents adds a new component to the pipeline
-func (f *RBForwarder) PushComponents(components []interface{}, w []int) {
-	for i, component := range components {
-		f.p.PushComponent(component.(utils.Composer), w[i])
+func (f *RBForwarder) PushComponents(components []interface{}) {
+	for _, component := range components {
+		f.p.PushComponent(component.(utils.Composer))
 	}
 }
 

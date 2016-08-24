@@ -15,10 +15,15 @@ import (
 // to an HTTP endpoint. It's a final component, so it will call Done() instead
 // of Next() and further components shuld not be added after this component.
 type HTTPSender struct {
-	id     int
-	err    error
-	URL    string
-	Client *http.Client
+	id  int
+	err error
+
+	Config
+}
+
+// Workers returns the number of workers
+func (httpsender *HTTPSender) Workers() int {
+	return httpsender.Config.Workers
 }
 
 // Spawn initializes the HTTP component
