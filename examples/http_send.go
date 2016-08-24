@@ -1,4 +1,4 @@
-// +build examples
+// +nobuild examples
 
 package main
 
@@ -14,7 +14,6 @@ import (
 func main() {
 	var wg sync.WaitGroup
 	var components []interface{}
-	var workers []int
 	const numMessages = 100000
 
 	f := rbforwarder.NewRBForwarder(rbforwarder.Config{
@@ -25,24 +24,26 @@ func main() {
 
 	batch := &batcher.Batcher{
 		Config: batcher.Config{
+			Workers:       2,
 			TimeoutMillis: 100,
 			Limit:         10000,
 		},
 	}
 	components = append(components, batch)
-	workers = append(workers, 5)
 
 	sender := &httpsender.HTTPSender{
-		URL: "http://localhost:8888",
+		Config: httpsender.Config{
+			Workers: 10,
+			URL:     "http://localhost:8888",
+		},
 	}
 	components = append(components, sender)
-	workers = append(workers, 10)
 
-	f.PushComponents(components, workers)
+	f.PushComponents(components)
 
 	opts := map[string]interface{}{
-		"http_endpoint": "librb-http",
-		"batch_group":   "librb-http",
+		"http_endpoint": "test",
+		"batch_group":   "example",
 	}
 
 	f.Run()

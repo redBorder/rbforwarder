@@ -14,4 +14,5 @@ type Done func(*Message, int, string)
 type Composer interface {
 	Spawn(int) Composer
 	OnMessage(*Message, Done)
+	Workers() int
 }

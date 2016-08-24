@@ -20,7 +20,12 @@ type Batcher struct {
 		done utils.Done
 	}
 
-	Config Config // Batcher configuration
+	Config
+}
+
+// Workers returns the number of workers
+func (batcher *Batcher) Workers() int {
+	return batcher.Config.Workers
 }
 
 // Spawn starts a gorutine that can receive:

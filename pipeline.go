@@ -7,7 +7,6 @@ import (
 
 // Component contains information about a pipeline component
 type Component struct {
-	workers   int
 	composser utils.Composer
 	pool      chan chan *utils.Message
 }
@@ -30,21 +29,19 @@ func newPipeline(input, retry, output chan *utils.Message) *pipeline {
 }
 
 // PushComponent adds a new component to the pipeline
-func (p *pipeline) PushComponent(composser utils.Composer, w int) {
+func (p *pipeline) PushComponent(composser utils.Composer) {
 	p.components = append(p.components, struct {
-		workers   int
 		composser utils.Composer
 		pool      chan chan *utils.Message
 	}{
-		workers:   w,
 		composser: composser,
-		pool:      make(chan chan *utils.Message, w),
+		pool:      make(chan chan *utils.Message, composser.Workers()),
 	})
 }
 
 func (p *pipeline) Run() {
 	for index, component := range p.components {
-		for w := 0; w < component.workers; w++ {
+		for w := 0; w < component.composser.Workers(); w++ {
 			go func(w, index int, component Component) {
 				component.composser = component.composser.Spawn(w)
 				messages := make(chan *utils.Message)
@@ -89,7 +86,7 @@ func (p *pipeline) Run() {
 				// If input channel has been closed, close output channel
 				if !ok {
 					for _, component := range p.components {
-						for i := 0; i < component.workers; i++ {
+						for i := 0; i < component.composser.Workers(); i++ {
 							worker := <-component.pool
 							close(worker)
 						}

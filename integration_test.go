@@ -14,6 +14,11 @@ type MockMiddleComponent struct {
 	mock.Mock
 }
 
+func (c *MockMiddleComponent) Workers() int {
+	args := c.Called()
+	return args.Int(0)
+}
+
 func (c *MockMiddleComponent) Spawn(id int) utils.Composer {
 	args := c.Called()
 	return args.Get(0).(utils.Composer)
@@ -36,6 +41,11 @@ type MockComponent struct {
 
 	status     string
 	statusCode int
+}
+
+func (c *MockComponent) Workers() int {
+	args := c.Called()
+	return args.Int(0)
 }
 
 func (c *MockComponent) Spawn(id int) utils.Composer {
@@ -69,14 +79,13 @@ func TestRBForwarder(t *testing.T) {
 			QueueSize: numMessages,
 		})
 
+		component.On("Workers").Return(numWorkers)
 		component.On("Spawn").Return(component).Times(numWorkers)
 
 		var components []interface{}
-		var instances []int
 		components = append(components, component)
-		instances = append(instances, numWorkers)
 
-		rbforwarder.PushComponents(components, instances)
+		rbforwarder.PushComponents(components)
 		rbforwarder.Run()
 
 		////////////////////////////////////////////////////////////////////////////
@@ -264,18 +273,16 @@ func TestRBForwarder(t *testing.T) {
 		for i := 0; i < numWorkers; i++ {
 			component1.On("Spawn").Return(component1)
 			component2.On("Spawn").Return(component2)
+			component1.On("Workers").Return(numWorkers)
+			component2.On("Workers").Return(numWorkers)
 		}
 
 		var components []interface{}
-		var instances []int
 
 		components = append(components, component1)
 		components = append(components, component2)
 
-		instances = append(instances, numWorkers)
-		instances = append(instances, numWorkers)
-
-		rbforwarder.PushComponents(components, instances)
+		rbforwarder.PushComponents(components)
 		rbforwarder.Run()
 
 		Convey("When a \"Hello World\" message is produced", func() {

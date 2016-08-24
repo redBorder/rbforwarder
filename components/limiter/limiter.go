@@ -19,6 +19,11 @@ type Limiter struct {
 	clk             clock.Clock
 }
 
+// Workers returns 1 because it should be only one instance of this component
+func (l *Limiter) Workers() int {
+	return 1
+}
+
 // Init initializes the limiter
 func (l *Limiter) Init(id int) {
 	l.id = id

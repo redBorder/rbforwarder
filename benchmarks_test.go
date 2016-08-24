@@ -15,6 +15,11 @@ import (
 
 type Null struct{}
 
+// Workers returns the number of workers
+func (null *Null) Workers() int {
+	return 1
+}
+
 func (null *Null) Spawn(id int) utils.Composer {
 	n := *null
 	return &n
@@ -47,7 +52,6 @@ func BenchmarkHTTPBatch100000(b *testing.B) { benchmarkHTTPBatch(10000, b) }
 func benchmarkQueue(queue int, b *testing.B) {
 	var wg sync.WaitGroup
 	var components []interface{}
-	var workers []int
 
 	f := NewRBForwarder(Config{
 		Retries:   3,
@@ -57,9 +61,8 @@ func benchmarkQueue(queue int, b *testing.B) {
 
 	null := &Null{}
 	components = append(components, null)
-	workers = append(workers, 1)
 
-	f.PushComponents(components, workers)
+	f.PushComponents(components)
 	f.Run()
 
 	opts := map[string]interface{}{}
@@ -91,7 +94,6 @@ func benchmarkQueue(queue int, b *testing.B) {
 func benchmarkBatch(batchSize int, b *testing.B) {
 	var wg sync.WaitGroup
 	var components []interface{}
-	var workers []int
 
 	f := NewRBForwarder(Config{
 		Retries:   3,
@@ -106,9 +108,8 @@ func benchmarkBatch(batchSize int, b *testing.B) {
 		},
 	}
 	components = append(components, batch)
-	workers = append(workers, 1)
 
-	f.PushComponents(components, workers)
+	f.PushComponents(components)
 	f.Run()
 
 	opts := map[string]interface{}{
@@ -135,6 +136,7 @@ func benchmarkBatch(batchSize int, b *testing.B) {
 		data := fmt.Sprintf("{\"message\": %d}", i)
 		f.Produce([]byte(data), opts, i)
 	}
+	b.StopTimer()
 
 	wg.Wait()
 }
@@ -142,7 +144,6 @@ func benchmarkBatch(batchSize int, b *testing.B) {
 func benchmarkHTTPBatch(batchSize int, b *testing.B) {
 	var wg sync.WaitGroup
 	var components []interface{}
-	var workers []int
 
 	f := NewRBForwarder(Config{
 		Retries:   3,
@@ -157,16 +158,16 @@ func benchmarkHTTPBatch(batchSize int, b *testing.B) {
 		},
 	}
 	components = append(components, batch)
-	workers = append(workers, 1)
 
 	sender := &httpsender.HTTPSender{
-		URL:    "http://localhost:8888",
-		Client: NewTestClient(200, func(r *http.Request) {}),
+		Config: httpsender.Config{
+			URL:    "http://localhost:8888",
+			Client: NewTestClient(200, func(r *http.Request) {}),
+		},
 	}
 	components = append(components, sender)
-	workers = append(workers, 1)
 
-	f.PushComponents(components, workers)
+	f.PushComponents(components)
 	f.Run()
 
 	opts := map[string]interface{}{
@@ -201,7 +202,6 @@ func benchmarkHTTPBatch(batchSize int, b *testing.B) {
 func benchmarkHTTP(b *testing.B) {
 	var wg sync.WaitGroup
 	var components []interface{}
-	var workers []int
 
 	f := NewRBForwarder(Config{
 		Retries:   3,
@@ -210,13 +210,14 @@ func benchmarkHTTP(b *testing.B) {
 	})
 
 	sender := &httpsender.HTTPSender{
-		URL:    "http://localhost:8888",
-		Client: NewTestClient(200, func(r *http.Request) {}),
+		Config: httpsender.Config{
+			URL:    "http://localhost:8888",
+			Client: NewTestClient(200, func(r *http.Request) {}),
+		},
 	}
 	components = append(components, sender)
-	workers = append(workers, 1)
 
-	f.PushComponents(components, workers)
+	f.PushComponents(components)
 	f.Run()
 
 	opts := map[string]interface{}{
