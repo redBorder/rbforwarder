@@ -36,14 +36,14 @@ func (httpsender *HTTPSender) Spawn(id int) utils.Composer {
 
 	if govalidator.IsURL(s.URL) {
 		s.Client = new(http.Client)
+
+		if httpsender.Config.Insecure {
+			s.Client.Transport = &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+		}
 	} else {
 		s.err = errors.New("Invalid URL")
-	}
-
-	if httpsender.Config.Insecure {
-		s.Client.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-		}
 	}
 
 	return &s
@@ -72,11 +72,7 @@ func (httpsender *HTTPSender) OnMessage(m *utils.Message, done utils.Done) {
 	}
 
 	buf := bytes.NewBuffer(data)
-	req, err := http.NewRequest("POST", u, buf)
-	if err != nil {
-		done(m, 1, "HTTPSender error: "+err.Error())
-		return
-	}
+	req, _ := http.NewRequest("POST", u, buf)
 
 	if h, exists := m.Opts.Get("http_headers"); exists {
 		headers = h.(map[string]string)

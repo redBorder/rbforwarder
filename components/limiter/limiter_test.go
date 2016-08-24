@@ -31,6 +31,14 @@ func TestHTTPSender(t *testing.T) {
 		}
 		limiter.Init(0)
 
+		Convey("When the numer of worker is requested", func() {
+			workers := limiter.Workers()
+
+			Convey("Should be only one", func() {
+				So(workers, ShouldEqual, 1)
+			})
+		})
+
 		Convey("When the limit number of messages are reached", func() {
 			clk := limiter.clk.(*clock.Mock)
 			n := Nexter{

@@ -28,6 +28,7 @@ func TestBatcher(t *testing.T) {
 	Convey("Given a batcher", t, func() {
 		batcher := &Batcher{
 			Config: Config{
+				Workers:           1,
 				TimeoutMillis:     1000,
 				Limit:             10,
 				MaxPendingBatches: 10,
@@ -37,6 +38,14 @@ func TestBatcher(t *testing.T) {
 
 		b := batcher.Spawn(0).(*Batcher)
 		b.clk = clock.NewMock()
+
+		Convey("When the number of workers is requested", func() {
+			workers := batcher.Workers()
+
+			Convey("Then the number of workers should be correct", func() {
+				So(workers, ShouldEqual, 1)
+			})
+		})
 
 		Convey("When a message is received with no batch group", func() {
 			m := utils.NewMessage()

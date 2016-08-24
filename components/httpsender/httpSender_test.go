@@ -50,16 +50,18 @@ func TestHTTPSender(t *testing.T) {
 	Convey("Given an HTTP sender with defined URL", t, func() {
 		sender := &HTTPSender{
 			Config: Config{
-				URL:     "http://example.com",
-				Workers: 1,
+				Workers:  1,
+				URL:      "http://example.com",
+				Insecure: true,
 			},
 		}
 
-		Convey("When is initialized", func() {
+		Convey("When it is initialized", func() {
 			s := sender.Spawn(0).(*HTTPSender)
 
 			Convey("Then the config should be ok", func() {
 				So(s.Client, ShouldNotBeNil)
+				So(s.Workers(), ShouldEqual, 1)
 			})
 		})
 
@@ -160,6 +162,44 @@ func TestHTTPSender(t *testing.T) {
 			})
 		})
 
+		Convey("When a message is received with headers", func() {
+			var url string
+			var headerValue string
+
+			s := sender.Spawn(0).(*HTTPSender)
+			m := utils.NewMessage()
+			m.PushPayload([]byte("Hello World"))
+			m.Opts.Set("http_headers", map[string]string{
+				"key": "value",
+			})
+
+			s.Client = NewTestClient(200, func(req *http.Request) {
+				url = req.URL.String()
+				headerValue = req.Header.Get("key")
+			})
+
+			d := &Doner{
+				doneCalled: make(chan struct {
+					code   int
+					status string
+				}, 1),
+			}
+			d.On("Done", mock.AnythingOfType("*utils.Message"),
+				mock.AnythingOfType("int"), mock.AnythingOfType("string"))
+
+			s.OnMessage(m, d.Done)
+
+			Convey("Then the message should be sent with headers set", func() {
+				result := <-d.doneCalled
+				So(result.status, ShouldEqual, "200 OK")
+				So(result.code, ShouldBeZeroValue)
+				So(url, ShouldEqual, "http://example.com/")
+				So(headerValue, ShouldEqual, "value")
+
+				d.AssertExpectations(t)
+			})
+		})
+
 		Convey("When a message without payload is received", func() {
 			var url string
 			s := sender.Spawn(0).(*HTTPSender)
@@ -195,7 +235,7 @@ func TestHTTPSender(t *testing.T) {
 			s := sender.Spawn(0).(*HTTPSender)
 
 			m := utils.NewMessage()
-			m.PushPayload([]byte("Hello World"))
+			m.PushPayload(nil)
 
 			s.Client = NewTestClient(200, func(req *http.Request) {
 				req.Write(nil)
@@ -223,7 +263,9 @@ func TestHTTPSender(t *testing.T) {
 	})
 
 	Convey("Given an HTTP sender with invalid URL", t, func() {
-		sender := &HTTPSender{}
+		sender := &HTTPSender{
+			Config: Config{Insecure: true},
+		}
 		s := sender.Spawn(0).(*HTTPSender)
 
 		Convey("When try to send messages", func() {
