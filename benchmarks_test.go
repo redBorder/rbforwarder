@@ -161,13 +161,14 @@ func benchmarkHTTPBatch(batchSize int, b *testing.B) {
 
 	sender := &httpsender.HTTPSender{
 		Config: httpsender.Config{
-			URL:    "http://localhost:8888",
-			Client: NewTestClient(200, func(r *http.Request) {}),
+			URL: "http://localhost:8888",
 		},
 	}
 	components = append(components, sender)
 
 	f.PushComponents(components)
+	sender.Client = NewTestClient(200, func(r *http.Request) {})
+
 	f.Run()
 
 	opts := map[string]interface{}{
@@ -211,13 +212,14 @@ func benchmarkHTTP(b *testing.B) {
 
 	sender := &httpsender.HTTPSender{
 		Config: httpsender.Config{
-			URL:    "http://localhost:8888",
-			Client: NewTestClient(200, func(r *http.Request) {}),
+			URL: "http://localhost:8888",
 		},
 	}
 	components = append(components, sender)
 
 	f.PushComponents(components)
+	sender.Client = NewTestClient(200, func(r *http.Request) {})
+
 	f.Run()
 
 	opts := map[string]interface{}{
