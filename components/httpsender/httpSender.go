@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/asaskevich/govalidator"
 	"github.com/redBorder/rbforwarder/utils"
 )
@@ -19,6 +20,7 @@ type HTTPSender struct {
 	id     int
 	err    error
 	Client *http.Client
+	logger *logrus.Entry
 
 	Config
 }
@@ -31,8 +33,22 @@ func (httpsender *HTTPSender) Workers() int {
 // Spawn initializes the HTTP component
 func (httpsender *HTTPSender) Spawn(id int) utils.Composer {
 	s := *httpsender
-
 	s.id = id
+
+	if httpsender.Config.Logger == nil {
+		s.logger = logrus.NewEntry(logrus.New())
+		s.logger.Logger.Out = ioutil.Discard
+	} else {
+		s.logger = httpsender.Config.Logger.WithFields(logrus.Fields{
+			"worker": id,
+		})
+	}
+
+	if httpsender.Debug {
+		s.logger.Logger.Level = logrus.DebugLevel
+	}
+
+	s.logger.Debugf("Spawning worker")
 
 	if govalidator.IsURL(s.URL) {
 		s.Client = new(http.Client)
@@ -53,15 +69,25 @@ func (httpsender *HTTPSender) Spawn(id int) utils.Composer {
 func (httpsender *HTTPSender) OnMessage(m *utils.Message, done utils.Done) {
 	var u string
 	var headers map[string]string
+	var code int
+	var status string
 
 	if httpsender.err != nil {
-		done(m, 2, httpsender.err.Error())
+		httpsender.logger.Debugf("Could not send message: %v", httpsender.err)
+		done(m, 100, httpsender.err.Error())
 		return
 	}
 
 	data, err := m.PopPayload()
+	defer func() {
+		m.PushPayload(data)
+		done(m, code, status)
+	}()
+
 	if err != nil {
-		done(m, 3, "Can't get payload of message: "+err.Error())
+		httpsender.logger.Debugf("Could not send message: %v", err)
+		code = 101
+		status = "Can't get payload of message: " + err.Error()
 		return
 	}
 
@@ -83,16 +109,22 @@ func (httpsender *HTTPSender) OnMessage(m *utils.Message, done utils.Done) {
 
 	res, err := httpsender.Client.Do(req)
 	if err != nil {
-		done(m, 1, "HTTPSender error: "+err.Error())
+		httpsender.logger.Warnf(err.Error())
+		code = 1
+		status = "HTTPSender error: " + err.Error()
 		return
 	}
 	io.Copy(ioutil.Discard, res.Body)
 	res.Body.Close()
 
 	if res.StatusCode >= 400 {
-		done(m, res.StatusCode, "HTTPSender error: "+res.Status)
+		httpsender.logger.Warnf("Got status: %v", res.Status)
+		code = 2
+		status = "HTTPSender error: " + res.Status
 		return
 	}
 
-	done(m, 0, res.Status)
+	code = 0
+	status = res.Status
+	httpsender.logger.Debugf("Sent message: %v", string(buf.Bytes()))
 }
