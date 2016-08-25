@@ -54,7 +54,7 @@ func (p *pipeline) Run() {
 							// If there is another component next in the pipeline send the
 							// messate to it. I other case send the message to the report
 							// handler
-							if len(p.components)-1 > index {
+							if code == 0 && len(p.components)-1 > index {
 								nextWorker := <-p.components[index+1].pool
 								nextWorker <- m
 							} else {
@@ -62,6 +62,7 @@ func (p *pipeline) Run() {
 
 								for !m.Reports.Empty() {
 									rep := m.Reports.Pop().(Report)
+									rep.Component = index
 									rep.Code = code
 									rep.Status = status
 									reports.Push(rep)
@@ -81,8 +82,14 @@ func (p *pipeline) Run() {
 	go func() {
 		for {
 			select {
-			case m, ok := <-p.input:
+			case m, ok := <-p.retry:
+				if ok {
+					rep := m.Reports.Head().(Report)
+					worker := <-p.components[rep.Component].pool
+					worker <- m
+				}
 
+			case m, ok := <-p.input:
 				// If input channel has been closed, close output channel
 				if !ok {
 					for _, component := range p.components {
@@ -96,10 +103,6 @@ func (p *pipeline) Run() {
 					worker := <-p.components[0].pool
 					worker <- m
 				}
-
-			case m := <-p.retry:
-				worker := <-p.components[0].pool
-				worker <- m
 			}
 		}
 	}()

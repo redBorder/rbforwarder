@@ -33,7 +33,7 @@ func newReporter(
 	r := &reportHandler{
 		input:   input,
 		retries: retries,
-		out:     make(chan *utils.Message, 100), // NOTE Temp channel size
+		out:     make(chan *utils.Message),
 
 		queued: make(map[uint64]interface{}),
 
