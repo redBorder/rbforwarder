@@ -88,6 +88,19 @@ func (p *pipeline) Run() {
 					worker := <-p.components[rep.Component].pool
 					worker <- m
 				}
+				continue
+
+			default:
+			}
+
+			select {
+			case m, ok := <-p.retry:
+				if ok {
+					rep := m.Reports.Head().(Report)
+					worker := <-p.components[rep.Component].pool
+					worker <- m
+				}
+				continue
 
 			case m, ok := <-p.input:
 				// If input channel has been closed, close output channel
