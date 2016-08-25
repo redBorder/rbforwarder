@@ -13,10 +13,11 @@ type Limiter struct {
 	id              int
 	currentMessages uint64
 	currentBytes    uint64
-	config          Config
 	keepSending     chan struct{}
 	paused          bool
 	clk             clock.Clock
+
+	Config
 }
 
 // Workers returns 1 because it should be only one instance of this component
@@ -24,11 +25,12 @@ func (l *Limiter) Workers() int {
 	return 1
 }
 
-// Init initializes the limiter
-func (l *Limiter) Init(id int) {
-	l.id = id
-	l.keepSending = make(chan struct{}, l.config.Burst)
-	l.paused = false
+// Spawn initializes the limiter
+func (l *Limiter) Spawn(id int) utils.Composer {
+	l.keepSending = make(chan struct{}, l.Config.Burst)
+	if l.clk == nil {
+		l.clk = clock.New()
+	}
 
 	go func() {
 		for {
@@ -36,10 +38,12 @@ func (l *Limiter) Init(id int) {
 			l.keepSending <- struct{}{}
 		}
 	}()
+
+	return l
 }
 
 // OnMessage will block the pipeline when the message rate is too high
-func (l *Limiter) OnMessage(m *utils.Message, next utils.Next, done utils.Done) {
+func (l *Limiter) OnMessage(m *utils.Message, done utils.Done) {
 	if l.paused {
 		<-l.keepSending
 		l.currentMessages = 0
@@ -48,7 +52,7 @@ func (l *Limiter) OnMessage(m *utils.Message, next utils.Next, done utils.Done) 
 	}
 
 	l.currentMessages++
-	if l.config.BytesLimit > 0 {
+	if l.Config.BytesLimit > 0 {
 		if payload, err := m.PopPayload(); err == nil {
 			l.currentBytes += uint64(len(payload))
 			m.PushPayload(payload)
@@ -56,8 +60,8 @@ func (l *Limiter) OnMessage(m *utils.Message, next utils.Next, done utils.Done) 
 	}
 	done(m, 0, "")
 
-	if l.config.MessageLimit > 0 && l.currentMessages >= l.config.MessageLimit ||
-		l.config.BytesLimit > 0 && l.currentBytes >= l.config.BytesLimit {
+	if l.Config.MessageLimit > 0 && l.currentMessages >= l.Config.MessageLimit ||
+		l.Config.BytesLimit > 0 && l.currentBytes >= l.Config.BytesLimit {
 		l.paused = true
 	}
 }
