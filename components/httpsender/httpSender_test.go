@@ -90,7 +90,7 @@ func TestHTTPSender(t *testing.T) {
 			Convey("Then the reporth should contain info about the error", func() {
 				result := <-d.doneCalled
 				So(result.status, ShouldEqual, "HTTPSender error: 401 Unauthorized")
-				So(result.code, ShouldEqual, 401)
+				So(result.code, ShouldEqual, 2)
 				So(url, ShouldEqual, "http://example.com/")
 
 				d.AssertExpectations(t)

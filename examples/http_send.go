@@ -6,6 +6,9 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/Sirupsen/logrus"
+	"github.com/x-cray/logrus-prefixed-formatter"
+
 	"github.com/redBorder/rbforwarder"
 	"github.com/redBorder/rbforwarder/components/batch"
 	"github.com/redBorder/rbforwarder/components/httpsender"
@@ -16,10 +19,13 @@ func main() {
 	var components []interface{}
 	const numMessages = 100000
 
+	httpLogger := logrus.New().WithField("prefix", "HTTP Sender")
+	httpLogger.Logger.Formatter = new(prefixed.TextFormatter)
+
 	f := rbforwarder.NewRBForwarder(rbforwarder.Config{
-		Retries:   1,
-		Backoff:   1,
-		QueueSize: 1000,
+		Retries:   2,
+		Backoff:   15,
+		QueueSize: 10,
 	})
 
 	batch := &batcher.Batcher{
@@ -34,6 +40,8 @@ func main() {
 	sender := &httpsender.HTTPSender{
 		Config: httpsender.Config{
 			Workers: 10,
+			Logger:  httpLogger,
+			Debug:   true,
 			URL:     "http://localhost:8888",
 		},
 	}
@@ -54,7 +62,7 @@ func main() {
 		var messages int
 
 		fmt.Print("[")
-		for report := range f.GetReports() {
+		for report := range f.GetOrderedReports() {
 			r := report.(rbforwarder.Report)
 			// fmt.Printf("[MESSAGE %d] %s\n", r.Opaque.(int), r.Status)
 			messages++
@@ -62,7 +70,7 @@ func main() {
 				fmt.Printf("=")
 			}
 			if r.Code > 0 {
-				errors += r.Code
+				errors++
 			}
 			if messages >= numMessages {
 				break
