@@ -12,6 +12,7 @@ import (
 	"github.com/redBorder/rbforwarder"
 	"github.com/redBorder/rbforwarder/components/batch"
 	"github.com/redBorder/rbforwarder/components/httpsender"
+	"github.com/redBorder/rbforwarder/components/limiter"
 )
 
 func main() {
@@ -28,24 +29,30 @@ func main() {
 		QueueSize: 10,
 	})
 
-	batch := &batcher.Batcher{
+	// Add Limiter component
+	components = append(components, &limiter.Limiter{
+		Config: limiter.Config{
+			BytesLimit: 256 * 1024,
+		},
+	})
+
+	// Add Batch component
+	components = append(components, &batcher.Batcher{
 		Config: batcher.Config{
 			Workers:       2,
 			TimeoutMillis: 100,
 			Limit:         10000,
 		},
-	}
-	components = append(components, batch)
+	})
 
-	sender := &httpsender.HTTPSender{
+	// Add HTTP Sender component
+	components = append(components, &httpsender.HTTPSender{
 		Config: httpsender.Config{
 			Workers: 10,
 			Logger:  httpLogger,
-			Debug:   true,
 			URL:     "http://localhost:8888",
 		},
-	}
-	components = append(components, sender)
+	})
 
 	f.PushComponents(components)
 
