@@ -8,18 +8,20 @@ branches:
     - develop
 
 go:
-- 1.5.2
+  - 1.5.4
+  - 1.6.3
+  - 1.7
 
 script:
   - $HOME/gopath/bin/goveralls
 
 install:
-- make get
-- make get_dev
+  - go get github.com/mattn/goveralls
+  - go get -t ./...
 
 script:
-#- make check
-- make test
+  - make test
 
-after_script:
-- make coverage
+after_success:
+  - make coverage
+  - goveralls -coverprofile=coverage.out -service=travis-ci
