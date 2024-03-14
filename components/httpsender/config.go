@@ -18,7 +18,7 @@
 
 package httpsender
 
-import "github.com/Sirupsen/logrus"
+import "github.com/sirupsen/logrus"
 
 // Config exposes the configuration for an HTTP Sender
 type Config struct {
